@@ -39,6 +39,16 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: omv
+      initContainers:
+        - name: install-duckdb-driver
+          image: alpine:3
+          command: [sh, -c]
+          args:
+            - wget -q https://github.com/AlexR2D2/metabase_duckdb_driver/releases/download/0.2.6/duckdb.metabase-driver.jar
+                -O /plugins/duckdb.metabase-driver.jar && echo "DuckDB driver ready"
+          volumeMounts:
+            - name: plugins
+              mountPath: /plugins
       containers:
         - name: metabase
           image: metabase/metabase:v0.53.x
@@ -59,6 +69,8 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /metabase-data
+            - name: plugins
+              mountPath: /plugins
           readinessProbe:
             httpGet:
               path: /api/health
@@ -86,6 +98,8 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: metabase-data
+        - name: plugins
+          emptyDir: {}
 
 ---
 apiVersion: v1
