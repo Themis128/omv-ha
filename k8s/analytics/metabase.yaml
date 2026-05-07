@@ -1,0 +1,141 @@
+###############################################################################
+# Metabase — BI / visualization layer
+# ARM64 image available since v0.46
+# Runs on omv-main (Pi5 8GB)
+# URL: https://metrics.cloudless.online
+###############################################################################
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: metabase-data
+  namespace: analytics
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metabase
+  namespace: analytics
+  labels:
+    app: metabase
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: metabase
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: metabase
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: omv
+      containers:
+        - name: metabase
+          image: metabase/metabase:v0.53.x
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: MB_DB_TYPE
+              value: "h2"                   # built-in H2 for MVP; migrate to Postgres for prod
+            - name: MB_DB_FILE
+              value: "/metabase-data/metabase.db"
+            - name: JAVA_OPTS
+              value: "-Xmx512m -Xms256m"   # constrain heap on ARM
+            - name: MB_SITE_URL
+              value: "https://metrics.cloudless.online"
+            - name: MB_EMOJI_IN_LOGS
+              value: "false"
+          volumeMounts:
+            - name: data
+              mountPath: /metabase-data
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 90        # Metabase is slow to start on ARM
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 768Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: metabase-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metabase
+  namespace: analytics
+spec:
+  selector:
+    app: metabase
+  ports:
+    - port: 3000
+      targetPort: 3000
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: metrics-tls
+  namespace: analytics
+spec:
+  secretName: metrics-tls
+  issuerRef:
+    name: letsencrypt-cloudflare
+    kind: ClusterIssuer
+  dnsNames:
+    - metrics.cloudless.online
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: metabase
+  namespace: analytics
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [metrics.cloudless.online]
+      secretName: metrics-tls
+  rules:
+    - host: metrics.cloudless.online
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: metabase
+                port:
+                  number: 3000

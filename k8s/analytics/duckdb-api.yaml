@@ -1,0 +1,121 @@
+###############################################################################
+# DuckDB Analytics API — k3s deployment
+# Image: build from k8s/analytics/duckdb-api/Dockerfile, push to ECR
+# Namespace: analytics
+###############################################################################
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: analytics
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: duckdb-data
+  namespace: analytics
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: duckdb-api-secrets
+  namespace: analytics
+type: Opaque
+stringData:
+  AWS_ACCESS_KEY_ID: "REPLACE_WITH_omv-main-cli-key"
+  AWS_SECRET_ACCESS_KEY: "REPLACE_WITH_omv-main-cli-secret"
+  ANALYTICS_S3_BUCKET: "cloudless-analytics-data"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: duckdb-api
+  namespace: analytics
+  labels:
+    app: duckdb-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: duckdb-api
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: duckdb-api
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: omv
+      initContainers:
+        # Copy ECR pull secret from cloudless ns (reuse existing one)
+        - name: ensure-data-dir
+          image: busybox:1.36
+          command: [sh, -c, "mkdir -p /data && chmod 777 /data"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: duckdb-api
+          image: ghcr.io/themis128/duckdb-api:latest
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: DATA_DIR
+              value: "/data"
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
+            - name: MAX_ROWS
+              value: "50000"
+          envFrom:
+            - secretRef:
+                name: duckdb-api-secrets
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 40
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1500Mi   # DuckDB can spike on large queries
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: duckdb-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: duckdb-api
+  namespace: analytics
+spec:
+  selector:
+    app: duckdb-api
+  ports:
+    - port: 80
+      targetPort: 8000
