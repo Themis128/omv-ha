@@ -1,0 +1,191 @@
+{
+  "name": "Analytics → Notion Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 7 * * *" }]
+        }
+      },
+      "id": "schedule-daily",
+      "name": "Daily 07:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://duckdb-api.analytics.svc.cluster.local/query",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "sql",
+              "value": "SELECT date, total_revenue, total_orders, avg_order_value, new_customers, returning_customers, refund_amount FROM mart_daily_revenue WHERE date = CURRENT_DATE - INTERVAL '1 day'"
+            }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "duckdb-revenue",
+      "name": "Query Revenue Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "claude-3-5-haiku-20241022" },
+            { "name": "max_tokens", "value": "1024" },
+            {
+              "name": "messages",
+              "value": "=[{\"role\":\"user\",\"content\":\"You are a business analyst. Given this JSON of daily e-commerce metrics, output ONLY valid JSON with these keys:\\n- summary: 2-sentence executive summary highlighting the most important trend\\n- key_metrics: pipe-delimited string of key metrics with values and WoW changes\\n- actions: numbered list of top 3 recommended actions (newline separated)\\n- revenue_impact: estimated monthly revenue impact in euros if actions implemented (integer only)\\n\\nData: \" + JSON.stringify($json.data)}]"
+            }
+          ]
+        }
+      },
+      "id": "claude-analyze",
+      "name": "Claude Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const content = items[0].json.content[0].text;\nconst parsed = JSON.parse(content);\nconst today = new Date().toISOString().split('T')[0];\nconst yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];\nreturn [{ json: { ...parsed, report_date: today, period_start: yesterday, period_end: yesterday } }];"
+      },
+      "id": "parse-claude",
+      "name": "Parse Claude Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": {
+          "__rl": true,
+          "value": "04bb30d4-3151-4ccc-af23-f5165094ba6d",
+          "mode": "id"
+        },
+        "title": "=Daily Brief — {{ $json.report_date }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Report Type", "type": "select", "selectValue": "Daily Brief" },
+            { "key": "Status", "type": "select", "selectValue": "Ready" },
+            { "key": "AI Summary", "type": "richText", "textContent": "={{ $json.summary }}" },
+            { "key": "Key Metrics", "type": "richText", "textContent": "={{ $json.key_metrics }}" },
+            { "key": "Recommended Actions", "type": "richText", "textContent": "={{ $json.actions }}" },
+            { "key": "Revenue Impact", "type": "number", "numberValue": "={{ $json.revenue_impact }}" },
+            { "key": "Report Date", "type": "date", "date": "={{ $json.report_date }}" },
+            { "key": "Period Start", "type": "date", "date": "={{ $json.period_start }}" },
+            { "key": "Period End", "type": "date", "date": "={{ $json.period_end }}" }
+          ]
+        }
+      },
+      "id": "notion-ai-reports",
+      "name": "Create AI Business Report",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [1060, 300],
+      "credentials": { "notionApi": { "id": "CONFIGURE_ME", "name": "Notion API" } }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": {
+          "__rl": true,
+          "value": "29a2d3b4-e63f-47a9-916a-dd7dda2a90b6",
+          "mode": "id"
+        },
+        "title": "=Daily Brief — {{ $json.report_date }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Report Type", "type": "select", "selectValue": "Analytics" },
+            { "key": "Status", "type": "select", "selectValue": "Ready" },
+            { "key": "Summary", "type": "richText", "textContent": "={{ $json.summary }}" }
+          ]
+        }
+      },
+      "id": "notion-admin-reports",
+      "name": "Create Admin Report (legacy)",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [1060, 480],
+      "credentials": { "notionApi": { "id": "CONFIGURE_ME", "name": "Notion API" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=📊 *Daily AI Report pushed to Notion* — {{ $('Parse Claude Response').item.json.report_date }}\n>{{ $('Parse Claude Response').item.json.summary }}\n\n💰 Revenue impact est: €{{ $('Parse Claude Response').item.json.revenue_impact }}/mo"
+            }
+          ]
+        }
+      },
+      "id": "slack-notify",
+      "name": "Slack Notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1280, 300]
+    }
+  ],
+  "connections": {
+    "Daily 07:00": { "main": [[{ "node": "Query Revenue Metrics", "type": "main", "index": 0 }]] },
+    "Query Revenue Metrics": { "main": [[{ "node": "Claude Analysis", "type": "main", "index": 0 }]] },
+    "Claude Analysis": { "main": [[{ "node": "Parse Claude Response", "type": "main", "index": 0 }]] },
+    "Parse Claude Response": {
+      "main": [[
+        { "node": "Create AI Business Report", "type": "main", "index": 0 },
+        { "node": "Create Admin Report (legacy)", "type": "main", "index": 0 }
+      ]]
+    },
+    "Create AI Business Report": { "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "cloudless-omv-main"
+  },
+  "_comment": {
+    "notion_databases": {
+      "ai_business_reports": "04bb30d4-3151-4ccc-af23-f5165094ba6d",
+      "social_media_performance": "b544029a-54c8-49f3-91dc-ddb9e1ed6ca0",
+      "campaign_tracker": "b22577af-ffd5-4d7c-ab54-ecd37b6cd27d",
+      "admin_reports_legacy": "29a2d3b4-e63f-47a9-916a-dd7dda2a90b6"
+    },
+    "setup_required": [
+      "Set NOTION_API_KEY credential in n8n",
+      "Set ANTHROPIC_API_KEY credential in n8n (Header Auth)",
+      "Set SLACK_WEBHOOK_URL environment variable",
+      "Deploy duckdb-api service to analytics namespace",
+      "Activate workflow after credential setup"
+    ]
+  }
+}
