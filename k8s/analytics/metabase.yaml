@@ -1,7 +1,8 @@
 ###############################################################################
 # Metabase — BI / visualization layer
-# ARM64 image available since v0.46
-# Runs on omv-main (Pi5 8GB)
+# ARM64 image: custom Debian (eclipse-temurin:21-jre-jammy) for glibc/DuckDB compat
+# Built on omv-main: /tmp/mb-build/Dockerfile → metabase-debian:v0.55
+# Runs on omv (Pi5 8GB)
 # URL: https://metrics.cloudless.online
 ###############################################################################
 
@@ -44,14 +45,14 @@ spec:
           image: alpine:3
           command: [sh, -c]
           args:
-            - wget -q https://github.com/AlexR2D2/metabase_duckdb_driver/releases/download/0.2.6/duckdb.metabase-driver.jar
-                -O /plugins/duckdb.metabase-driver.jar && echo "DuckDB driver ready"
+            - wget -q https://github.com/motherduckdb/metabase_duckdb_driver/releases/download/0.4.1/duckdb.metabase-driver.jar
+                -O /plugins/duckdb.metabase-driver.jar && chmod 777 /plugins && chmod 644 /plugins/duckdb.metabase-driver.jar && echo "DuckDB driver ready"
           volumeMounts:
             - name: plugins
               mountPath: /plugins
       containers:
         - name: metabase
-          image: metabase/metabase:v0.53.x
+          image: metabase-debian:v0.55   # local image — built on omv-main, imported into k3s containerd
           ports:
             - name: http
               containerPort: 3000
@@ -61,21 +62,26 @@ spec:
             - name: MB_DB_FILE
               value: "/metabase-data/metabase.db"
             - name: JAVA_OPTS
-              value: "-Xmx512m -Xms256m"   # constrain heap on ARM
+              value: "-Xmx512m -Xms256m -DMB_PLUGINS_DIR=/plugins"
             - name: MB_SITE_URL
               value: "https://metrics.cloudless.online"
             - name: MB_EMOJI_IN_LOGS
               value: "false"
+            - name: MB_PLUGINS_DIR
+              value: "/plugins"
           volumeMounts:
             - name: data
               mountPath: /metabase-data
             - name: plugins
               mountPath: /plugins
+            - name: duckdb-data
+              mountPath: /duckdb-data
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /api/health
               port: 3000
-            initialDelaySeconds: 90        # Metabase is slow to start on ARM
+            initialDelaySeconds: 240       # v0.55 Liquibase migrations slow on ARM
             periodSeconds: 15
             timeoutSeconds: 10
             failureThreshold: 6
@@ -83,23 +89,27 @@ spec:
             httpGet:
               path: /api/health
               port: 3000
-            initialDelaySeconds: 120
+            initialDelaySeconds: 300
             periodSeconds: 30
             timeoutSeconds: 10
             failureThreshold: 3
           resources:
             requests:
               cpu: 200m
-              memory: 512Mi
+              memory: 640Mi
             limits:
               cpu: 1000m
-              memory: 768Mi
+              memory: 1536Mi          # v0.55 Liquibase migrations need >768Mi on ARM
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: metabase-data
         - name: plugins
           emptyDir: {}
+        - name: duckdb-data
+          persistentVolumeClaim:
+            claimName: duckdb-data
+            readOnly: true
 
 ---
 apiVersion: v1
