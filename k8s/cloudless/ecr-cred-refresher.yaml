@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ecr-cred-refresher
+  namespace: cloudless
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ecr-cred-refresher
+  namespace: cloudless
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ecr-cred-refresher
+  namespace: cloudless
+subjects:
+  - kind: ServiceAccount
+    name: ecr-cred-refresher
+    namespace: cloudless
+roleRef:
+  kind: Role
+  name: ecr-cred-refresher
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ecr-cred-refresher
+  namespace: cloudless
+spec:
+  # ECR tokens expire after 12h. Run every 6h to give a 6h safety margin
+  # in case one run fails (backoffLimit: 2 gives 2 retries within the window).
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: ecr-cred-refresher
+          containers:
+          - name: refresh
+            image: alpine/k8s:1.30.0
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              set -euo pipefail
+              PASS=$(aws ecr get-login-password --region "$AWS_DEFAULT_REGION")
+              AUTH=$(printf 'AWS:%s' "$PASS" | base64 -w0)
+              cat > /tmp/dockercfg.json <<EOF
+              {"auths":{"278585680617.dkr.ecr.us-east-1.amazonaws.com":{"username":"AWS","password":"$PASS","auth":"$AUTH"}}}
+              EOF
+              kubectl -n cloudless delete secret regcred-ecr --ignore-not-found
+              kubectl -n cloudless create secret generic regcred-ecr \
+                --type=kubernetes.io/dockerconfigjson \
+                --from-file=.dockerconfigjson=/tmp/dockercfg.json
+              echo "regcred-ecr refreshed at $(date -u +%FT%TZ)"
+            envFrom:
+            - secretRef:
+                name: pi-standby-aws-creds
+            resources:
+              requests:
+                cpu: 50m
+                memory: 96Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi

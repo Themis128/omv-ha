@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: auto-healer
+  namespace: cloudless
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: auto-healer
+  namespace: cloudless
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: auto-healer
+  namespace: cloudless
+subjects:
+  - kind: ServiceAccount
+    name: auto-healer
+    namespace: cloudless
+roleRef:
+  kind: Role
+  name: auto-healer
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: auto-healer
+  namespace: cloudless
+spec:
+  schedule: "*/3 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 120
+      template:
+        spec:
+          serviceAccountName: auto-healer
+          restartPolicy: Never
+          containers:
+            - name: auto-healer
+              image: alpine/k8s:1.30.0
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  NS="cloudless"
+                  TS() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+
+                  echo "[$(TS)] auto-healer starting"
+
+                  # Detect ImagePullBackOff / ErrImagePull pods
+                  PULL_PODS=$(kubectl get pods -n "$NS" \
+                    -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .status.containerStatuses[*]}{.state.waiting.reason}{"\n"}{end}{end}' \
+                    2>/dev/null | grep -E 'ImagePullBackOff|ErrImagePull' | awk '{print $1}' | sort -u || true)
+
+                  if [ -n "$PULL_PODS" ]; then
+                    echo "[$(TS)] ImagePullBackOff pods: $(echo "$PULL_PODS" | tr '\n' ' ')"
+                    JOB="ecr-heal-$(date -u +%s)"
+                    kubectl create job "$JOB" --from=cronjob/ecr-cred-refresher -n "$NS"
+                    echo "[$(TS)] ECR refresh job $JOB created — waiting 15s"
+                    sleep 15
+                    for POD in $PULL_PODS; do
+                      kubectl delete pod "$POD" -n "$NS" --grace-period=0 \
+                        && echo "[$(TS)] deleted pod $POD" \
+                        || echo "[$(TS)] WARNING: could not delete $POD"
+                    done
+                  else
+                    echo "[$(TS)] no ImagePullBackOff pods"
+                  fi
+
+                  # Log CrashLoopBackOff pods with >5 restarts (no auto-action)
+                  kubectl get pods -n "$NS" -o json 2>/dev/null \
+                  | jq -r '.items[] | .metadata.name as $p |
+                    .status.containerStatuses[]? |
+                    select(.state.waiting.reason == "CrashLoopBackOff" and .restartCount > 5) |
+                    [$p, (.restartCount|tostring), .name] | @tsv' \
+                  | while read -r pod restarts ctr; do
+                    echo "[$(TS)] WARNING: $pod/$ctr CrashLoopBackOff restarts=$restarts — manual action needed"
+                  done
+
+                  echo "[$(TS)] auto-healer done"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi

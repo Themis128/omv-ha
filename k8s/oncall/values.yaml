@@ -1,0 +1,55 @@
+base_url: oncall.cloudless.online
+base_url_protocol: https
+broker:
+  type: redis
+celery:
+  nodeSelector:
+    kubernetes.io/hostname: omv
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 400m
+      memory: 600Mi   # increased from 400Mi (was OOMKilling)
+    requests:
+      cpu: 50m
+      memory: 256Mi
+cert-manager:
+  enabled: false
+engine:
+  nodeSelector:
+    kubernetes.io/hostname: omv
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 800Mi   # increased from 500Mi (was OOMKilling)
+    requests:
+      cpu: 100m
+      memory: 300Mi
+externalGrafana:
+  url: http://kube-prom-grafana.monitoring.svc.cluster.local
+externalMysql:
+  db_name: oncall
+  host: oncall-mariadb.oncall.svc.cluster.local
+  password: OncallDB2026!
+  port: 3306
+  user: oncall
+externalRedis:
+  host: oncall-redis.oncall.svc.cluster.local
+  password: OnCallRedis2026!
+  port: 6379
+grafana:
+  enabled: false
+ingress:
+  enabled: false
+ingress-nginx:
+  enabled: false
+mariadb:
+  enabled: false
+migrate:
+  nodeSelector:
+    kubernetes.io/hostname: omv
+rabbitmq:
+  enabled: false
+redis:
+  enabled: false

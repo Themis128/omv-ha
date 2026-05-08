@@ -1,0 +1,69 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: oncall-cloudless-online-tls
+  namespace: oncall
+spec:
+  dnsNames:
+    - oncall.cloudless.online
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-cloudflare
+  secretName: oncall-cloudless-online-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oncall
+  namespace: oncall
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.priority: "10"
+    traefik.ingress.kubernetes.io/router.middlewares: oncall-oncall-admin-chain@kubernetescrd,kube-system-hsts@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: oncall.cloudless.online
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: oncall-engine
+                port:
+                  number: 8080
+  tls:
+    - hosts:
+        - oncall.cloudless.online
+      secretName: oncall-cloudless-online-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oncall-webhooks
+  namespace: oncall
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.priority: "20"
+    traefik.ingress.kubernetes.io/router.middlewares: oncall-oncall-webhook-chain@kubernetescrd,kube-system-hsts@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: oncall.cloudless.online
+      http:
+        paths:
+          - path: /integrations/
+            pathType: Prefix
+            backend:
+              service:
+                name: oncall-engine
+                port:
+                  number: 8080
+  tls:
+    - hosts:
+        - oncall.cloudless.online
+      secretName: oncall-cloudless-online-tls

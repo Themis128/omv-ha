@@ -1,0 +1,117 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudless
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudless
+  namespace: cloudless
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudless
+  template:
+    metadata:
+      labels:
+        app: cloudless
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: omv  # pin to omv-main: Pi5 8GB, omv-ha is Pi4 1GB
+      imagePullSecrets:
+        - name: regcred-ecr
+      containers:
+        - name: cloudless
+          image: 278585680617.dkr.ecr.us-east-1.amazonaws.com/cloudless-pi-app:latest
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 60
+            timeoutSeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 60
+            timeoutSeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudless
+  namespace: cloudless
+spec:
+  selector:
+    app: cloudless
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cloudless-online-tls
+  namespace: cloudless
+spec:
+  secretName: cloudless-online-tls
+  issuerRef:
+    name: letsencrypt-cloudflare
+    kind: ClusterIssuer
+  dnsNames:
+    - cloudless.online
+    - www.cloudless.online
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cloudless
+  namespace: cloudless
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - cloudless.online
+        - www.cloudless.online
+      secretName: cloudless-online-tls
+  rules:
+    - host: cloudless.online
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cloudless
+                port:
+                  number: 3000
+    - host: www.cloudless.online
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cloudless
+                port:
+                  number: 3000

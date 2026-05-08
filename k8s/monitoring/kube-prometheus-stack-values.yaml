@@ -1,0 +1,482 @@
+# kube-prometheus-stack — cloudless Pi cluster (arm64)
+# Full analytical admin dashboard at NodePort 10000
+fullnameOverride: "monitoring"
+
+defaultRules:
+  create: true
+  rules:
+    alertmanager: true
+    etcd: false
+    configReloaders: true
+    general: true
+    k8sContainerCpuUsageSecondsTotal: true
+    k8sContainerMemoryCache: true
+    k8sContainerMemoryRss: true
+    k8sContainerMemorySwap: true
+    k8sPodOwner: true
+    kubeApiserverAvailability: true
+    kubeApiserverBurnrate: true
+    kubeApiserverHistogram: true
+    kubeApiserverSlos: true
+    kubelet: true
+    kubeStateMetrics: true
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: true
+    kubernetesSystem: true
+    node: true
+    nodeExporterAlerting: true
+    nodeExporterRecording: true
+    prometheus: true
+    prometheusOperator: true
+  # Disable alerts that produce constant false positives on k3s / 2-node homelab
+  disabled:
+    KubeSchedulerDown: true          # k3s embeds scheduler — not scraped separately
+    KubeControllerManagerDown: true  # k3s embeds controller-manager — not scraped
+    KubeProxyDown: true              # k3s uses kube-router, no kube-proxy
+    NodeRAIDDegraded: true           # irrelevant on NVMe/SD Pi hardware
+    NodeRAIDDiskFailure: true        # irrelevant on NVMe/SD Pi hardware
+    NodeFileDescriptorLimit: true    # trips constantly on Pi 4 (1GB) under normal load
+    KubeAPIErrorBudgetBurn: true     # production SLO burn rate — too noisy for homelab
+
+# Not accessible separately in k3s (embedded in binary)
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+# AlertManager — runs on omv-ha (Pi 4); NFS PVC for cross-node mobility
+alertmanager:
+  enabled: true
+  config:
+    global:
+      resolve_timeout: 5m
+    inhibit_rules:
+      # Node down → suppress all pod/deployment alerts on that node
+      - source_matchers: [alertname = "KubeNodeNotReady"]
+        target_matchers: [severity =~ "warning|critical"]
+        equal: [node]
+      # Node unreachable → suppress pod/deployment churn alerts
+      - source_matchers: [alertname = "KubeNodeUnreachable"]
+        target_matchers: [alertname =~ "KubePodNotReady|KubePodCrashLooping|KubeDeploymentReplicasMismatch"]
+        equal: [node]
+      # Critical inhibits same-alertname warning (avoids double-notification)
+      - source_matchers: [severity = "critical"]
+        target_matchers: [severity = "warning"]
+        equal: [namespace, alertname]
+      # InfoInhibitor pattern from kube-prometheus-stack
+      - source_matchers: [alertname = "InfoInhibitor"]
+        target_matchers: [severity = "info"]
+        equal: [namespace]
+    route:
+      receiver: "null"
+      group_by: [namespace, alertname, severity]
+      group_wait: 45s
+      group_interval: 5m
+      repeat_interval: 6h
+      routes:
+        - receiver: "null"
+          matchers: [alertname = "Watchdog"]
+        - receiver: "null"
+          matchers: [alertname = "InfoInhibitor"]
+        # ntfy: critical alerts → immediate push to ntfy.cloudless.online/alerts (continue fan-out)
+        - receiver: "ntfy-alerts"
+          matchers: [severity = "critical"]
+          continue: true
+          group_wait: 10s
+          group_interval: 2m
+          repeat_interval: 1h
+        - receiver: "oncall-webhook"
+          matchers: [severity = "warning"]
+          group_wait: 2m
+          group_interval: 10m
+          repeat_interval: 12h
+        - receiver: "oncall-webhook"
+          matchers: [severity = "critical"]
+          group_wait: 30s
+          group_interval: 3m
+          repeat_interval: 2h
+    receivers:
+      - name: "null"
+      # ntfy self-hosted push relay — criticals only, continue:true fans out to oncall-webhook too
+      - name: "ntfy-alerts"
+        webhook_configs:
+          - url: "http://ntfy.ntfy.svc.cluster.local/alerts"
+            send_resolved: true
+            max_alerts: 10
+            http_config:
+              basic_auth:
+                username: alertmanager
+                password: "am-ntfy-2026!"
+      # After creating integration in OnCall (Integrations → + New → Alertmanager Prometheus),
+      # replace REPLACE_WITH_INTEGRATION_TOKEN with the token from the generated URL.
+      - name: "oncall-webhook"
+        webhook_configs:
+          - url: "http://oncall-engine.oncall.svc.cluster.local:8080/integrations/v1/alertmanager/aed2bf7d35817a5e8f27306c35d3/"
+            send_resolved: true
+            max_alerts: 50
+  alertmanagerSpec:
+    replicas: 1
+    nodeSelector:
+      kubernetes.io/hostname: omv-ha
+    retention: 24h
+    logLevel: warn
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: nfs
+          accessModes: ["ReadWriteMany"]
+          resources:
+            requests:
+              storage: 2Gi
+
+# Grafana — comprehensive admin dashboard at NodePort 10000
+grafana:
+  enabled: true
+  adminPassword: "Cloudless@Admin2026!"
+
+  service:
+    type: NodePort
+    nodePort: 10000
+    port: 80
+    targetPort: 3000
+
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 3Gi
+
+  nodeSelector:
+    kubernetes.io/hostname: omv
+
+  deploymentStrategy:
+    type: Recreate
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+
+  # Go runtime: GOMEMLIMIT auto-set by chart from limits.memory; GOGC tuned for ARM
+  env:
+    GOGC: "50"
+
+  envFromSecret: "aws-creds"
+
+  sidecar:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
+    datasources:
+      enabled: true
+      alertmanager:
+        enabled: true
+        handleGrafanaManagedAlerts: false
+        implementation: prometheus
+
+  grafana.ini:
+    server:
+      root_url: "https://grafana.cloudless.online"
+      enable_gzip: true
+
+    # SQLite WAL: critical for alert-state write performance on ARM
+    database:
+      wal: true
+      cache_mode: shared
+      query_retries: 3
+      transaction_retries: 5
+
+    # Cap connections and payload sizes to protect 768Mi limit
+    dataproxy:
+      timeout: 60
+      keep_alive_seconds: 30
+      max_idle_connections: 30
+      idle_conn_timeout_seconds: 60
+      max_conns_per_host: 10
+      response_limit: 104857600
+      row_limit: 100000
+
+    # Alerting: 30s min eval interval for single Pi 5 node
+    unified_alerting:
+      enabled: true
+      execute_alerts: true
+      min_interval: 30s
+      evaluation_timeout: 45s
+      max_attempts: 2
+      ha_single_node_evaluation: true
+      admin_config_poll_interval: 120s
+      alertmanager_config_poll_interval: 120s
+
+    # Batch alert state saves to NFS instead of every eval cycle
+    feature_toggles:
+      alertingSaveStatePeriodic: true
+
+    analytics:
+      check_for_updates: false
+
+    auth:
+      disable_login_form: false
+
+    security:
+      allow_embedding: true
+      cookie_secure: true
+      cookie_samesite: lax
+
+    users:
+      allow_sign_up: false
+
+    log:
+      level: warn
+
+    metrics:
+      interval_seconds: 60
+
+  additionalDataSources:
+    - name: CloudWatch
+      type: cloudwatch
+      access: proxy
+      isDefault: false
+      jsonData:
+        authType: keys
+        defaultRegion: us-east-1
+        logsTimeout: 30s
+        queryTimeout: 30s
+        timezoneUTCOffset: "+00:00"
+        tracingDatasourceUid: ""
+        externalId: ""
+      secureJsonData:
+        accessKey: "${AWS_ACCESS_KEY_ID}"
+        secretKey: "${AWS_SECRET_ACCESS_KEY}"
+      version: 1
+      editable: true
+
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: cluster
+          orgId: 1
+          folder: "Cluster"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/cluster
+        - name: nodes
+          orgId: 1
+          folder: "Nodes"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/nodes
+        - name: apps
+          orgId: 1
+          folder: "Applications"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/apps
+        - name: aws
+          orgId: 1
+          folder: "AWS"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/aws
+        - name: infra
+          orgId: 1
+          folder: "Infrastructure"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/infra
+
+  # Community dashboards — auto-imported on deploy
+  dashboards:
+    cluster:
+      k8s-global-views:
+        gnetId: 15760
+        revision: 42
+        datasource: Prometheus
+      k8s-workloads-namespace:
+        gnetId: 15761
+        revision: 19
+        datasource: Prometheus
+      k8s-cluster-overview:
+        gnetId: 7249
+        revision: 1
+        datasource: Prometheus
+      k8s-persistent-volumes:
+        gnetId: 13646
+        revision: 2
+        datasource: Prometheus
+      k8s-namespace-resource-quota:
+        gnetId: 12135
+        revision: 1
+        datasource: Prometheus
+    nodes:
+      node-exporter-full:
+        gnetId: 1860
+        revision: 36
+        datasource: Prometheus
+      node-exporter-quickstart:
+        gnetId: 13978
+        revision: 2
+        datasource: Prometheus
+    apps:
+      traefik-official:
+        gnetId: 17501
+        revision: 1
+        datasource: Prometheus
+      k8s-pods:
+        gnetId: 15660
+        revision: 1
+        datasource: Prometheus
+      k8s-cronjobs:
+        gnetId: 13026
+        revision: 3
+        datasource: Prometheus
+      alertmanager-overview:
+        gnetId: 9578
+        revision: 4
+        datasource: Prometheus
+    aws:
+      aws-lambda-insights:
+        gnetId: 19268
+        revision: 1
+        datasource: CloudWatch
+    infra:
+      prometheus-stats:
+        gnetId: 2
+        revision: 2
+        datasource: Prometheus
+      k8s-api-server:
+        gnetId: 15761
+        revision: 19
+        datasource: Prometheus
+
+# Prometheus
+prometheus:
+  prometheusSpec:
+    replicas: 1
+    retention: 7d
+    retentionSize: "4GB"
+
+    nodeSelector:
+      kubernetes.io/hostname: omv
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1500m
+        memory: 2Gi
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+
+    # Discover ServiceMonitors/PodMonitors across ALL namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+    additionalScrapeConfigs:
+      # Auto-discover pods with prometheus.io/scrape=true annotation
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+
+      # Traefik metrics
+      - job_name: traefik
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [kube-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            action: keep
+            regex: traefik
+          - source_labels: [__address__]
+            action: replace
+            regex: ([^:]+)(?::\d+)?
+            replacement: $1:9100
+            target_label: __address__
+
+# kube-state-metrics — stateless, no nodeSelector; scheduler decides
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# node-exporter — DaemonSet on ALL nodes (omv + omv-ha)
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  tolerations:
+    - effect: NoSchedule
+      operator: Exists
+  extraArgs:
+    - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/.+)($|/)
+    - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$
