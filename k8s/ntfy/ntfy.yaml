@@ -1,0 +1,146 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ntfy
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ntfy-config
+  namespace: ntfy
+data:
+  server.yml: |
+    base-url: https://ntfy.cloudless.online
+    listen-http: :80
+    cache-file: /var/cache/ntfy/cache.db
+    cache-duration: 12h
+    auth-file: /var/lib/ntfy/user.db
+    auth-default-access: deny-all
+    behind-proxy: true
+    attachment-cache-dir: /var/cache/ntfy/attachments
+    attachment-expiry-duration: 3h
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ntfy-data
+  namespace: ntfy
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ntfy
+  namespace: ntfy
+  labels:
+    app: ntfy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ntfy
+  template:
+    metadata:
+      labels:
+        app: ntfy
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: omv-ha
+      containers:
+        - name: ntfy
+          image: binwiederhier/ntfy
+          args:
+            - serve
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ntfy
+              readOnly: true
+            - name: data
+              mountPath: /var/cache/ntfy
+              subPath: cache
+            - name: data
+              mountPath: /var/lib/ntfy
+              subPath: lib
+      volumes:
+        - name: config
+          configMap:
+            name: ntfy-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: ntfy-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ntfy
+  namespace: ntfy
+  labels:
+    app: ntfy
+spec:
+  type: ClusterIP
+  selector:
+    app: ntfy
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ntfy-cloudless-online-tls
+  namespace: ntfy
+spec:
+  secretName: ntfy-cloudless-online-tls
+  issuerRef:
+    name: letsencrypt-cloudflare
+    kind: ClusterIssuer
+  dnsNames:
+    - ntfy.cloudless.online
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ntfy
+  namespace: ntfy
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  tls:
+    - hosts:
+        - ntfy.cloudless.online
+      secretName: ntfy-cloudless-online-tls
+  rules:
+    - host: ntfy.cloudless.online
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ntfy
+                port:
+                  number: 80

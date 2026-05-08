@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: hsts
+  namespace: kube-system
+spec:
+  headers:
+    stsSeconds: 63072000        # 2 years
+    stsIncludeSubdomains: true
+    stsPreload: false           # enable only after confirming all subdomains are HTTPS-only
+    forceSTSHeader: false       # Traefik sends HSTS only on TLS connections — no need to force
+    frameDeny: true
+    contentTypeNosniff: true
+    browserXssFilter: true
+    referrerPolicy: "strict-origin-when-cross-origin"
+    permissionsPolicy: "camera=(), microphone=(), geolocation=()"

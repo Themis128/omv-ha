@@ -1,0 +1,134 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: auth-cloudless-online-tls
+  namespace: keycloak
+spec:
+  secretName: auth-cloudless-online-tls
+  issuerRef:
+    name: letsencrypt-cloudflare
+    kind: ClusterIssuer
+  dnsNames:
+    - auth.cloudless.online
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: omv
+      containers:
+      - name: keycloak
+        image: quay.io/keycloak/keycloak:26.2
+        args: ["start"]
+        ports:
+        - name: http
+          containerPort: 8080
+        env:
+        - name: KC_DB
+          value: postgres
+        - name: KC_DB_URL
+          value: jdbc:postgresql://postgres.keycloak.svc.cluster.local:5432/keycloak?ssl=true&sslfactory=org.postgresql.ssl.NonValidatingFactory
+        - name: KC_DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: keycloak-db-secret
+              key: username
+        - name: KC_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: keycloak-db-secret
+              key: password
+        - name: KEYCLOAK_ADMIN
+          valueFrom:
+            secretKeyRef:
+              name: keycloak-admin-secret
+              key: admin-user
+        - name: KEYCLOAK_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: keycloak-admin-secret
+              key: admin-password
+        - name: KC_HOSTNAME
+          value: auth.cloudless.online
+        - name: KC_PROXY_HEADERS
+          value: xforwarded
+        - name: KC_HTTP_ENABLED
+          value: "true"
+        - name: KC_HEALTH_ENABLED
+          value: "true"
+        - name: KC_HTTPS_ENABLED
+          value: "false"
+        - name: JAVA_OPTS_APPEND
+          value: "-Xms192m -Xmx512m -Djdk.reflect.useDirectMethodHandle=false"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 9000
+          initialDelaySeconds: 120
+          periodSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 9000
+          initialDelaySeconds: 180
+          periodSeconds: 30
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  selector:
+    app: keycloak
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak
+  namespace: keycloak
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - auth.cloudless.online
+    secretName: auth-cloudless-online-tls
+  rules:
+  - host: auth.cloudless.online
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: keycloak
+            port:
+              number: 8080

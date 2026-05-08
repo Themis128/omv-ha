@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  namespace: cloudless
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: omv  # must run on omv-main: Keycloak + Cloudflare tunnel are here
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+          args:
+            - --provider=oidc
+            - --oidc-issuer-url=https://auth.cloudless.online/realms/master
+            - --client-id=cloudless-manager
+            - --redirect-url=https://manage.cloudless.online/oauth2/callback
+            - --upstream=http://cloudless-manager.cloudless.svc.cluster.local:3000
+            - --http-address=0.0.0.0:4180
+            - --email-domain=*
+            - --skip-provider-button=true
+            - --cookie-secure=true
+            - --cookie-name=_oauth2_proxy_manager
+          env:
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy-secret
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy-secret
+                  key: cookie-secret
+          ports:
+            - containerPort: 4180
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+  namespace: cloudless
+spec:
+  selector:
+    app: oauth2-proxy
+  ports:
+    - port: 4180
+      targetPort: 4180

@@ -1,0 +1,34 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  failurePolicy: reinstall
+  valuesContent: |
+    ports:
+      web:
+        port: 18080
+        exposedPort: 18080
+      websecure:
+        port: 18443
+        exposedPort: 18443
+        middlewares:
+          - kube-system-compress@kubernetescrd
+          - kube-system-hsts@kubernetescrd
+    additionalArguments:
+      - "--entryPoints.websecure.http.middlewares=kube-system-compress@kubernetescrd,kube-system-hsts@kubernetescrd"
+    metrics:
+      prometheus:
+        enabled: true
+        addEntryPointsLabels: true
+        addServicesLabels: true
+        addRoutersLabels: true
+        buckets: "0.1,0.3,1.2,5.0"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi

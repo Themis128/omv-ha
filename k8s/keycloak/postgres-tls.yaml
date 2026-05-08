@@ -1,0 +1,47 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cloudless-internal-ca
+  namespace: keycloak
+spec:
+  secretName: cloudless-internal-ca
+  issuerRef:
+    name: selfsigned
+    kind: ClusterIssuer
+  subject:
+    organizations:
+    - cloudless
+  commonName: cloudless-internal-ca
+  isCA: true
+  duration: 87600h
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: cloudless-ca
+  namespace: keycloak
+spec:
+  ca:
+    secretName: cloudless-internal-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: postgres-tls
+  namespace: keycloak
+spec:
+  secretName: postgres-tls
+  issuerRef:
+    name: cloudless-ca
+    kind: Issuer
+  subject:
+    organizations:
+    - cloudless
+  commonName: postgres.keycloak.svc.cluster.local
+  dnsNames:
+  - postgres
+  - postgres.keycloak
+  - postgres.keycloak.svc
+  - postgres.keycloak.svc.cluster.local
+  duration: 8760h
+  renewBefore: 720h

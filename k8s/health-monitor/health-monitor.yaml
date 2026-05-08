@@ -1,0 +1,117 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: health-monitor
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: health-monitor
+  namespace: kube-system
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: health-monitor
+  namespace: kube-system
+subjects:
+  - kind: ServiceAccount
+    name: health-monitor
+    namespace: kube-system
+roleRef:
+  kind: Role
+  name: health-monitor
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: health-monitor
+  namespace: kube-system
+spec:
+  schedule: "*/2 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 120
+      backoffLimit: 0
+      template:
+        spec:
+          serviceAccountName: health-monitor
+          restartPolicy: Never
+          containers:
+            - name: health-monitor
+              image: alpine/k8s:1.30.0
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+
+                  TIMESTAMP="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+                  TRAEFIK_STATUS="FAIL"
+                  APP_STATUS="FAIL"
+
+                  # ── 1. Check traefik deployment ready replicas ───────────────────────
+                  READY_REPLICAS="$(kubectl get deployment traefik -n kube-system \
+                    -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo '0')"
+
+                  if [ -z "${READY_REPLICAS}" ] || [ "${READY_REPLICAS}" -lt 1 ]; then
+                    echo "[${TIMESTAMP}] ERROR: traefik deployment has ${READY_REPLICAS:-0} ready replicas — restarting"
+                    kubectl rollout restart deployment/traefik -n kube-system \
+                      && echo "[${TIMESTAMP}] INFO: rollout restart issued for traefik" \
+                      || echo "[${TIMESTAMP}] ERROR: failed to issue rollout restart for traefik"
+                    TRAEFIK_STATUS="FAIL"
+                  else
+                    echo "[${TIMESTAMP}] INFO: traefik deployment has ${READY_REPLICAS} ready replica(s)"
+                    TRAEFIK_STATUS="OK"
+                  fi
+
+                  # ── 2. Check Traefik VIP endpoint ───────────────────────────────────
+                  HTTP_CODE="$(curl -sk --max-time 5 -o /dev/null -w '%{http_code}' \
+                    https://192.168.1.200:18443/ 2>/dev/null || echo '')"
+
+                  if [ -z "${HTTP_CODE}" ] || [ "${HTTP_CODE}" = "000" ]; then
+                    echo "[${TIMESTAMP}] ERROR: Traefik VIP https://192.168.1.200:18443/ did not respond"
+                    TRAEFIK_STATUS="FAIL"
+                  else
+                    echo "[${TIMESTAMP}] INFO: Traefik VIP responded with HTTP ${HTTP_CODE}"
+                    # Only upgrade to OK if deployment check also passed
+                    if [ "${TRAEFIK_STATUS}" = "OK" ]; then
+                      TRAEFIK_STATUS="OK"
+                    fi
+                  fi
+
+                  # ── 3. Check https://cloudless.online/api/health ─────────────────────
+                  APP_RESPONSE="$(curl -sk --max-time 10 \
+                    https://cloudless.online/api/health 2>/dev/null || echo '')"
+
+                  if echo "${APP_RESPONSE}" | grep -qi 'ok'; then
+                    echo "[${TIMESTAMP}] INFO: cloudless.online/api/health responded — status ok"
+                    APP_STATUS="OK"
+                  else
+                    echo "[${TIMESTAMP}] ERROR: cloudless.online/api/health did not return ok — response: ${APP_RESPONSE:-<no response>}"
+                    APP_STATUS="FAIL"
+                  fi
+
+                  # ── 4. Summary ────────────────────────────────────────────────────────
+                  echo "[${TIMESTAMP}] health: traefik=${TRAEFIK_STATUS} app=${APP_STATUS}"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
