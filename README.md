@@ -339,6 +339,35 @@ cd D:\cloudless-manager
 
 **Critical**: stop omv-ha BEFORE starting omv-main after reset. If omv-ha's old k3s runs even briefly while omv-main resets, it adds a stale peer and breaks quorum again.
 
+---
+
+## Test Results — 2026-05-08
+
+| Test | Result |
+|------|--------|
+| `omv` node | Ready ✅ |
+| `omv-ha` node | Ready ✅ |
+| All pods (34 Running + 3 Completed) | Running ✅ |
+| `cloudless.online/api/health` | `{"status":"ok","version":"0.1.0"}` ✅ |
+| `ha.cloudless.online` | HTTP 302 (login redirect) ✅ |
+| `auth.cloudless.online` | HTTP 302 (Keycloak login) ✅ |
+| `metrics.cloudless.online` | HTTP 200 (Metabase) ✅ |
+| `n8n.cloudless.online` | HTTP 200 ✅ |
+| `cloudless-online-tls` | READY ✅ |
+| `ha-cloudless-online-tls` | READY ✅ |
+| `auth-cloudless-online-tls` | READY ✅ |
+| `grafana-cloudless-online-tls` | READY ✅ |
+| `oncall-cloudless-online-tls` | READY ✅ |
+| `n8n-tls` | READY ✅ |
+| `ntfy-cloudless-online-tls` | READY ✅ |
+| `metrics-tls` | READY ✅ |
+| `postgres-tls` (internal CA) | READY ✅ |
+| etcd S3 snapshots (`cloudless-etcd-snapshots`) | Active, every 6h ✅ |
+| n8n secrets | Fully populated ✅ |
+| alertmanager oncall webhook | Real token configured ✅ |
+
+---
+
 ### Rebuild after node failure
 1. Verify keepalived VIP is on surviving node
 2. Check Cloudflare Tunnel: `kubectl get pods -n cloudless -l app=cloudflared`
