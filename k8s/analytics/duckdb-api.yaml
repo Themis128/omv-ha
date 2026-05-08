@@ -1,6 +1,9 @@
 ###############################################################################
 # DuckDB Analytics API — k3s deployment
-# Image: build from k8s/analytics/duckdb-api/Dockerfile, push to ECR
+# Image: duckdb-api-local:v2 (built on omv-main, imported into k3s containerd)
+#   Base: ghcr.io/themis128/duckdb-api:latest + in-memory DuckDB patch
+#   Uses in-memory DuckDB so Metabase's read-only file lock is never contested.
+#   Data lives in Parquet files on /data PVC; views are registered at startup.
 # Namespace: analytics
 ###############################################################################
 
@@ -66,7 +69,8 @@ spec:
               mountPath: /data
       containers:
         - name: duckdb-api
-          image: ghcr.io/themis128/duckdb-api:latest
+          image: duckdb-api-local:v2   # local image — in-memory DuckDB, no file lock conflict
+          imagePullPolicy: Never
           ports:
             - name: http
               containerPort: 8000
