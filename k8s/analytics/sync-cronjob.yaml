@@ -1,0 +1,60 @@
+###############################################################################
+# S3 → DuckDB PVC sync CronJob
+# Namespace: analytics  ← must be here to mount the duckdb-data PVC
+# Runs every 30 minutes on omv (same node as the local-path PVC).
+# Credentials: reuses duckdb-api-secrets (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+#              ANALYTICS_S3_BUCKET already present in that secret).
+###############################################################################
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: s3-to-duckdb-sync
+  namespace: analytics
+spec:
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          restartPolicy: OnFailure
+          nodeSelector:
+            kubernetes.io/hostname: omv
+          containers:
+            - name: sync
+              image: amazon/aws-cli:2.22.35
+              command:
+                - sh
+                - -c
+                - |
+                  set -e
+                  echo "[$(date -u)] Starting S3 sync from s3://${ANALYTICS_S3_BUCKET}/parquet/ ..."
+                  aws s3 sync "s3://${ANALYTICS_S3_BUCKET}/parquet/" /data/parquet/ \
+                    --exact-timestamps \
+                    --delete \
+                    --exclude "*.tmp"
+                  echo "[$(date -u)] Sync complete."
+              env:
+                - name: AWS_DEFAULT_REGION
+                  value: "us-east-1"
+              envFrom:
+                - secretRef:
+                    name: duckdb-api-secrets   # has AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, ANALYTICS_S3_BUCKET
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: duckdb-data

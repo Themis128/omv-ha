@@ -7,7 +7,7 @@ Two-node embedded-etcd k3s cluster running on Raspberry Pi hardware, serving [cl
 | Hostname | Hardware | Role | IP |
 |----------|----------|------|----|
 | `omv` | Pi 5 (8 GB) | server + worker | 192.168.1.128 |
-| `omv-ha` | Pi 4 (4 GB) | server + worker | 192.168.1.130 |
+| `omv-ha` | Pi 4 (1 GB) | server + worker | 192.168.1.130 |
 | VIP | keepalived VRRP | kube-apiserver endpoint | 192.168.1.200 |
 
 WireGuard CNI (flannel-native). etcd heartbeat 300 ms / election 3000 ms (tuned for SD-card fsync latency).
@@ -16,10 +16,10 @@ WireGuard CNI (flannel-native). etcd heartbeat 300 ms / election 3000 ms (tuned 
 
 ```
 k8s/
-├── analytics/          # DuckDB API + Metabase (namespace: analytics)
+├── analytics/          # DuckDB API + Metabase + S3 sync CronJob (namespace: analytics)
 ├── ha/
 │   └── config/         # k3s server configs for both nodes
-├── maintenance/        # Cluster maintenance CronJobs (namespace: maintenance)
+├── maintenance/        # Cluster maintenance CronJobs — GC, journal vacuum, health check (namespace: maintenance)
 ├── monitoring/         # kube-prometheus-stack Helm values + PrometheusRules
 ├── n8n/                # n8n workflow engine (namespace: n8n)
 └── oncall/             # Grafana OnCall deps, Helm values, ingress, security
@@ -31,11 +31,13 @@ k8s/
 
 | Namespace | Contents | Node affinity |
 |-----------|----------|---------------|
-| `analytics` | duckdb-api, metabase | omv |
-| `cloudless` | cloudless-manager | omv |
-| `maintenance` | CronJobs (GC, S3 sync, journal vacuum, health check) | mixed |
+| `analytics` | duckdb-api, metabase, s3-to-duckdb-sync CronJob | omv |
+| `cloudless` | cloudless-manager, cloudless-app (standby), oauth2-proxy | omv |
+| `home-assistant` | home-assistant | omv |
+| `maintenance` | CronJobs (RS GC, journal vacuum, health check) | mixed |
 | `monitoring` | Prometheus, Grafana, Alertmanager, kube-state-metrics, node-exporter | omv / omv-ha |
 | `n8n` | n8n workflow engine | omv |
+| `ntfy` | ntfy push notification server | omv |
 | `oncall` | oncall-engine, oncall-celery, oncall-mariadb, oncall-redis | omv |
 
 ## Secrets reference
@@ -46,7 +48,6 @@ All secrets are created manually (`kubectl create secret`) and are **not** store
 |-------------|-----------|------|
 | `duckdb-api-secrets` | analytics | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `ANALYTICS_S3_BUCKET` |
 | `n8n-secrets` | n8n | `N8N_ENCRYPTION_KEY`, `NOTION_API_KEY`, `ANTHROPIC_API_KEY`, `SLACK_WEBHOOK_URL` |
-| `aws-creds` | maintenance | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
 | `oncall-mariadb-secret` | oncall | `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD` |
 | `oncall-basicauth` | oncall | `users` (htpasswd format) |
 | `aws-creds` | monitoring | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (Grafana CloudWatch) |
@@ -76,11 +77,12 @@ kubectl apply -f k8s/oncall/oncall-ingress.yaml
 # 6. Analytics
 kubectl apply -f k8s/analytics/duckdb-api.yaml
 kubectl apply -f k8s/analytics/metabase.yaml
+kubectl apply -f k8s/analytics/sync-cronjob.yaml   # S3→PVC sync (analytics ns — shares duckdb-data PVC)
 
 # 7. n8n
 kubectl apply -f k8s/n8n/n8n.yaml
 
-# 8. Maintenance CronJobs
+# 8. Maintenance CronJobs (RS GC, journal vacuum, health check — no AWS creds needed)
 kubectl apply -f k8s/maintenance/cronjobs.yaml
 
 # 9. PrometheusRules
