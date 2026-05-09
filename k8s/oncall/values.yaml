@@ -1,55 +1,85 @@
 base_url: oncall.cloudless.online
 base_url_protocol: https
-broker:
-  type: redis
-celery:
-  nodeSelector:
-    kubernetes.io/hostname: omv
-  replicaCount: 1
-  resources:
-    limits:
-      cpu: 400m
-      memory: 600Mi   # increased from 400Mi (was OOMKilling)
-    requests:
-      cpu: 50m
-      memory: 256Mi
-cert-manager:
-  enabled: false
-engine:
-  nodeSelector:
-    kubernetes.io/hostname: omv
-  replicaCount: 1
-  resources:
-    limits:
-      cpu: 500m
-      memory: 800Mi   # increased from 500Mi (was OOMKilling)
-    requests:
-      cpu: 100m
-      memory: 300Mi
-externalGrafana:
-  url: http://kube-prom-grafana.monitoring.svc.cluster.local
-externalMysql:
-  db_name: oncall
-  host: oncall-mariadb.oncall.svc.cluster.local
-  password: OncallDB2026!
-  port: 3306
-  user: oncall
-externalRedis:
-  host: oncall-redis.oncall.svc.cluster.local
-  password: OnCallRedis2026!
-  port: 6379
+
+# ── Grafana ──────────────────────────────────────────────────────────────────
+# Disable bundled Grafana — use existing kube-prometheus-stack instance
 grafana:
   enabled: false
-ingress:
+
+externalGrafana:
+  url: http://kube-prom-grafana.monitoring.svc.cluster.local
+
+# ── Broker: Redis (lighter than RabbitMQ) ────────────────────────────────────
+broker:
+  type: redis
+
+rabbitmq:
   enabled: false
-ingress-nginx:
+
+# ── Broker: Redis (standalone deployment, official image) ────────────────────
+# NOTE: Redis is deployed separately as redis:7-alpine (Bitnami arm64 issues)
+# See k8s-temp/oncall-deps.yaml for the standalone StatefulSet + Service
+redis:
   enabled: false
+
+externalRedis:
+  host: oncall-redis.oncall.svc.cluster.local
+  port: 6379
+  password: "OnCallRedis2026!"
+
+# ── Database: MariaDB (standalone deployment, official image) ─────────────────
+# NOTE: MariaDB is deployed separately as mariadb:11 (Bitnami arm64 issues)
+# See k8s-temp/oncall-deps.yaml for the standalone StatefulSet + Service
+database:
+  type: mysql
+
 mariadb:
   enabled: false
+
+externalMysql:
+  host: oncall-mariadb.oncall.svc.cluster.local
+  port: 3306
+  db_name: oncall
+  user: oncall
+  password: "OncallDB2026!"
+
+# ── Engine ────────────────────────────────────────────────────────────────────
+engine:
+  replicaCount: 1
+  nodeSelector:
+    kubernetes.io/hostname: omv
+  resources:
+    requests:
+      memory: 200Mi
+      cpu: 100m
+    limits:
+      memory: 500Mi
+      cpu: 500m
+
+# ── Celery workers ────────────────────────────────────────────────────────────
+celery:
+  replicaCount: 1
+  nodeSelector:
+    kubernetes.io/hostname: omv
+  resources:
+    requests:
+      memory: 200Mi
+      cpu: 50m
+    limits:
+      memory: 400Mi
+      cpu: 400m
+
+# ── DB migration job ──────────────────────────────────────────────────────────
 migrate:
   nodeSelector:
     kubernetes.io/hostname: omv
-rabbitmq:
+
+# ── Ingress: disabled — we create our own Traefik Ingress + cert-manager cert ─
+ingress:
   enabled: false
-redis:
+
+ingress-nginx:
+  enabled: false
+
+cert-manager:
   enabled: false
