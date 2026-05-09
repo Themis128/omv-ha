@@ -1,0 +1,37 @@
+cluster-init: true
+secrets-encryption: true
+flannel-backend: wireguard-native
+tls-san:
+  - "192.168.1.200"
+  - "192.168.1.128"
+
+kube-apiserver-arg:
+  - "service-node-port-range=1000-32767"
+
+# etcd slow-disk tuning (2026-05-08)
+# Default heartbeat=100ms, election=1000ms are too tight for SD card fsync latency (~100-160ms)
+# Raising 3x reduces spurious leader elections under I/O pressure (per etcd best practices)
+etcd-arg:
+  - "heartbeat-interval=300"
+  - "election-timeout=3000"
+  - "quota-backend-bytes=2147483648"   # 2GB — prevents etcd DB from growing unbounded
+
+# kubelet memory reservation — mirrors omv-ha for consistent eviction behaviour
+kubelet-arg:
+  - "max-pods=110"
+  - "eviction-hard=memory.available<200Mi"
+  - "eviction-soft=memory.available<400Mi"
+  - "eviction-soft-grace-period=memory.available=2m"
+  - "system-reserved=cpu=200m,memory=200Mi"
+  - "kube-reserved=cpu=200m,memory=300Mi"
+
+# etcd S3 snapshots — every 6h, 3 retained, to cloudless-etcd-snapshots bucket
+etcd-snapshot-schedule-cron: "0 */6 * * *"
+etcd-snapshot-retention: 3
+etcd-s3: true
+etcd-s3-bucket: cloudless-etcd-snapshots
+etcd-s3-region: us-east-1
+etcd-s3-folder: etcd
+etcd-s3-access-key: AKIAUBXIAELUYMUPWXLG
+etcd-s3-secret-key: REDACTED_AWS_SECRET_OMVMAINCLI
+etcd-s3-insecure: false
