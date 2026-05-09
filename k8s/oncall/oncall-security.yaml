@@ -1,0 +1,97 @@
+# ── OnCall security middlewares ───────────────────────────────────────────────
+#
+# Apply order:
+#   1. kubectl apply -f oncall-security.yaml
+#   2. Generate a real password hash, then:
+#      kubectl -n oncall create secret generic oncall-basicauth \
+#        --from-literal=users="$(htpasswd -nb admin 'yourpassword')" \
+#        --dry-run=client -o yaml | kubectl apply -f -
+#   3. kubectl apply -f oncall-ingress.yaml   (updated version)
+#
+# Middleware reference format for ingress annotations (cross-namespace):
+#   oncall-oncall-admin-chain@kubernetescrd
+#   oncall-oncall-webhook-chain@kubernetescrd
+#   kube-system-hsts@kubernetescrd           (reuse existing)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# BasicAuth credentials — replace placeholder before applying
+# Generate: htpasswd -nb admin 'yourpassword'
+# On Windows (WSL): sudo apt install apache2-utils && htpasswd -nb admin 'yourpassword'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oncall-basicauth
+  namespace: oncall
+type: Opaque
+stringData:
+  # Regenerate: openssl passwd -apr1 'yourpassword'
+  # then: kubectl -n oncall create secret generic oncall-basicauth \
+  #   --from-literal=users="tbaltzakis@cloudless.gr:<hash>" --dry-run=client -o yaml | kubectl apply -f -
+  users: "tbaltzakis@cloudless.gr:<hash-managed-in-cluster>"
+---
+# Rate limit: 100 req/min average, burst 200 — applied to all routes
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: oncall-ratelimit
+  namespace: oncall
+spec:
+  rateLimit:
+    average: 100
+    burst: 200
+    period: 1m
+    sourceCriterion:
+      ipStrategy:
+        # depth: 1 reads the real client IP from X-Forwarded-For
+        # (Cloudflare tunnel sets this correctly)
+        depth: 1
+---
+# BasicAuth — admin-only access
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: oncall-basicauth
+  namespace: oncall
+spec:
+  basicAuth:
+    secret: oncall-basicauth
+    realm: "OnCall Admin"
+    removeHeader: true   # don't forward Authorization header to backend
+---
+# Max 50 concurrent connections per source IP (slowloris / connection exhaustion defence)
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: oncall-inflightreq
+  namespace: oncall
+spec:
+  inFlightReq:
+    amount: 50
+    sourceCriterion:
+      ipStrategy:
+        depth: 1
+---
+# Admin chain: connection cap → rate-limit → basicauth
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: oncall-admin-chain
+  namespace: oncall
+spec:
+  chain:
+    middlewares:
+      - name: oncall-inflightreq
+      - name: oncall-ratelimit
+      - name: oncall-basicauth
+---
+# Webhook chain: connection cap → rate-limit only (public — needed for alert integrations)
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: oncall-webhook-chain
+  namespace: oncall
+spec:
+  chain:
+    middlewares:
+      - name: oncall-inflightreq
+      - name: oncall-ratelimit
