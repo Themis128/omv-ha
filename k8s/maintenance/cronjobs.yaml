@@ -2,6 +2,10 @@
 # Cluster Maintenance CronJobs
 # Namespace: maintenance
 # Deploy: kubectl apply -f k8s/maintenance/cronjobs.yaml
+#
+# NOTE: S3 → DuckDB sync lives in k8s/analytics/sync-cronjob.yaml
+#       It must run in the analytics namespace to access the duckdb-data PVC
+#       (Kubernetes PVCs are namespace-scoped — cross-ns mounts are impossible).
 ###############################################################################
 
 apiVersion: v1
@@ -10,79 +14,8 @@ metadata:
   name: maintenance
 
 ---
-# Secret: AWS credentials for S3 sync jobs
-apiVersion: v1
-kind: Secret
-metadata:
-  name: aws-creds
-  namespace: maintenance
-type: Opaque
-stringData:
-  AWS_ACCESS_KEY_ID: "AKIAUBXIAELUYMUPWXLG"
-  AWS_SECRET_ACCESS_KEY: "REDACTED_AWS_SECRET_OMVMAINCLI"
-
----
 ###############################################################################
-# 1. S3 → DuckDB PVC sync
-#    Pulls new Parquet files from cloudless-analytics-data bucket to the
-#    duckdb-data PVC so the DuckDB API can serve the latest data.
-#    Runs every 30 minutes on omv (same node as duckdb-api PVC).
-###############################################################################
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: s3-to-duckdb-sync
-  namespace: maintenance
-spec:
-  schedule: "*/30 * * * *"
-  concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 3
-  jobTemplate:
-    spec:
-      activeDeadlineSeconds: 300
-      template:
-        spec:
-          restartPolicy: OnFailure
-          nodeSelector:
-            kubernetes.io/hostname: omv
-          containers:
-            - name: sync
-              image: amazon/aws-cli:2.22.35
-              command:
-                - sh
-                - -c
-                - |
-                  echo "[$(date -u)] Starting S3 sync..."
-                  aws s3 sync s3://cloudless-analytics-data/parquet/ /data/parquet/ \
-                    --exact-timestamps \
-                    --delete \
-                    --exclude "*.tmp"
-                  echo "[$(date -u)] Sync complete."
-              env:
-                - name: AWS_DEFAULT_REGION
-                  value: "us-east-1"
-              envFrom:
-                - secretRef:
-                    name: aws-creds
-              volumeMounts:
-                - name: duckdb-data
-                  mountPath: /data
-              resources:
-                requests:
-                  cpu: 50m
-                  memory: 64Mi
-                limits:
-                  cpu: 200m
-                  memory: 128Mi
-          volumes:
-            - name: duckdb-data
-              persistentVolumeClaim:
-                claimName: duckdb-data
-
----
-###############################################################################
-# 2. ReplicaSet garbage collection
+# 1. ReplicaSet garbage collection
 #    Deletes ReplicaSets with 0 desired/current/ready replicas older than 48h.
 #    Keeps the 3 most recent per Deployment. Runs nightly at 02:00.
 ###############################################################################
@@ -127,8 +60,8 @@ spec:
 
 ---
 ###############################################################################
-# 3. Journald size cap on Pi nodes
-#    Caps systemd-journald on both Pi nodes to 200MB vacuum.
+# 2. Journald size cap — omv (Pi 5)
+#    Caps systemd-journald to 200MB vacuum.
 #    Runs weekly on Sunday at 03:00.
 #    Uses hostPID + nsenter to reach the host journalctl.
 ###############################################################################
@@ -171,6 +104,9 @@ spec:
                   memory: 32Mi
 
 ---
+###############################################################################
+# 3. Journald size cap — omv-ha (Pi 4)
+###############################################################################
 apiVersion: batch/v1
 kind: CronJob
 metadata:
