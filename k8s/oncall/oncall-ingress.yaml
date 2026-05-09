@@ -1,0 +1,77 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: oncall-cloudless-online-tls
+  namespace: oncall
+spec:
+  secretName: oncall-cloudless-online-tls
+  issuerRef:
+    name: letsencrypt-cloudflare
+    kind: ClusterIssuer
+  dnsNames:
+    - oncall.cloudless.online
+---
+# ── Webhook ingress (PUBLIC — rate-limited only) ──────────────────────────────
+# /integrations/v1/<token>/ paths receive inbound alerts from external sources
+# (Prometheus AlertManager, Grafana alerts, etc.)
+# Higher router priority wins on path overlap with the admin ingress below.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oncall-webhooks
+  namespace: oncall
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.priority: "20"
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      oncall-oncall-webhook-chain@kubernetescrd,kube-system-hsts@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: oncall.cloudless.online
+    http:
+      paths:
+      - path: /integrations/
+        pathType: Prefix
+        backend:
+          service:
+            name: oncall-engine
+            port:
+              number: 8080
+  tls:
+  - hosts:
+    - oncall.cloudless.online
+    secretName: oncall-cloudless-online-tls
+---
+# ── Admin ingress (PROTECTED — rate-limit + basicauth) ───────────────────────
+# Covers everything not matched by the webhook ingress above.
+# The Grafana plugin uses the internal cluster URL and is NOT affected by this.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oncall
+  namespace: oncall
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.priority: "10"
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      oncall-oncall-admin-chain@kubernetescrd,kube-system-hsts@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: oncall.cloudless.online
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: oncall-engine
+            port:
+              number: 8080
+  tls:
+  - hosts:
+    - oncall.cloudless.online
+    secretName: oncall-cloudless-online-tls
