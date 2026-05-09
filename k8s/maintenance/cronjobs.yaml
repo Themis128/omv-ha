@@ -18,8 +18,8 @@ metadata:
   namespace: maintenance
 type: Opaque
 stringData:
-  AWS_ACCESS_KEY_ID: "REPLACE_WITH_omv-main-cli-key"
-  AWS_SECRET_ACCESS_KEY: "REPLACE_WITH_omv-main-cli-secret"
+  AWS_ACCESS_KEY_ID: "AKIAUBXIAELUYMUPWXLG"
+  AWS_SECRET_ACCESS_KEY: "cbS5Wvr8MeJGLWihKzZmX/T2HiQZiO5v70J47Spx"
 
 ---
 ###############################################################################
