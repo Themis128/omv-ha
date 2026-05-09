@@ -69,8 +69,8 @@ spec:
               mountPath: /data
       containers:
         - name: duckdb-api
-          image: duckdb-api-local:v2   # local image — in-memory DuckDB, no file lock conflict
-          imagePullPolicy: Never
+          image: ghcr.io/themis128/duckdb-api:latest
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8000
