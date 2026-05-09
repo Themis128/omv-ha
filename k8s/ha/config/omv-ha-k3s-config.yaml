@@ -1,0 +1,36 @@
+server: https://192.168.1.128:6443
+secrets-encryption: true
+flannel-backend: wireguard-native
+tls-san:
+  - "192.168.1.200"
+  - "192.168.1.130"
+
+kube-apiserver-arg:
+  - "service-node-port-range=1000-32767"
+  - "max-requests-inflight=100"
+  - "max-mutating-requests-inflight=50"
+
+# etcd slow-disk tuning (2026-05-08)
+# Default heartbeat=100ms, election=1000ms are too tight for SD card fsync latency (~100-160ms)
+etcd-arg:
+  - "heartbeat-interval=300"
+  - "election-timeout=3000"
+  - "quota-backend-bytes=2147483648"   # 2GB
+
+kube-controller-manager-arg:
+  - "concurrent-deployment-syncs=2"
+  - "concurrent-endpoint-syncs=2"
+  - "concurrent-replicaset-syncs=2"
+  - "concurrent-resource-quota-syncs=2"
+
+kube-scheduler-arg:
+  - "kube-api-burst=20"
+  - "kube-api-qps=10"
+
+kubelet-arg:
+  - "max-pods=50"
+  - "eviction-hard=memory.available<150Mi"
+  - "eviction-soft=memory.available<250Mi"
+  - "eviction-soft-grace-period=memory.available=2m"
+  - "system-reserved=cpu=200m,memory=150Mi"
+  - "kube-reserved=cpu=100m,memory=100Mi"
