@@ -44,6 +44,16 @@ spec:
             timeoutSeconds: 10
             periodSeconds: 30
             failureThreshold: 3
+          envFrom:
+            - secretRef:
+                name: pi-standby-aws-creds
+          env:
+            - name: SSM_PREFIX
+              value: /cloudless/production
+            - name: AWS_REGION
+              value: us-east-1
+            - name: STRIPE_TRANSACTIONS_TABLE
+              value: cloudless-production-StripeTransactionsTable-nhtvnuew
           resources:
             requests:
               memory: "256Mi"
