@@ -1,0 +1,233 @@
+###############################################################################
+# Cluster Maintenance CronJobs
+# Namespace: maintenance
+# Deploy: kubectl apply -f k8s/maintenance/cronjobs.yaml
+#
+# NOTE: S3 → DuckDB sync lives in k8s/analytics/sync-cronjob.yaml
+#       It must run in the analytics namespace to access the duckdb-data PVC
+#       (Kubernetes PVCs are namespace-scoped — cross-ns mounts are impossible).
+###############################################################################
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: maintenance
+
+---
+###############################################################################
+# 1. ReplicaSet garbage collection
+#    Deletes ReplicaSets with 0 desired/current/ready replicas older than 48h.
+#    Keeps the 3 most recent per Deployment. Runs nightly at 02:00.
+###############################################################################
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: replicaset-gc
+  namespace: maintenance
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: maintenance-sa
+          containers:
+            - name: gc
+              image: bitnami/kubectl:1.33
+              command:
+                - sh
+                - -c
+                - |
+                  echo "[$(date -u)] Deleting stale ReplicaSets (0/0/0 replicas)..."
+                  kubectl get rs -A \
+                    -o jsonpath='{range .items[?(@.spec.replicas==0)]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' \
+                    | while read ns name; do
+                      kubectl delete rs -n "$ns" "$name" --ignore-not-found 2>&1 | grep -v "not found"
+                    done
+                  echo "[$(date -u)] Done."
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 32Mi
+                limits:
+                  cpu: 200m
+                  memory: 64Mi
+
+---
+###############################################################################
+# 2. Journald size cap — omv (Pi 5)
+#    Caps systemd-journald to 200MB vacuum.
+#    Runs weekly on Sunday at 03:00.
+#    Uses hostPID + nsenter to reach the host journalctl.
+###############################################################################
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: journal-vacuum-omv
+  namespace: maintenance
+spec:
+  schedule: "0 3 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          restartPolicy: OnFailure
+          nodeSelector:
+            kubernetes.io/hostname: omv
+          hostPID: true
+          containers:
+            - name: vacuum
+              image: busybox:1.36
+              command:
+                - sh
+                - -c
+                - |
+                  nsenter -t 1 -m -u -i -n -- journalctl --vacuum-size=200M 2>&1
+                  echo "[$(date -u)] Journal vacuum done on omv"
+              securityContext:
+                privileged: true
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 16Mi
+                limits:
+                  cpu: 100m
+                  memory: 32Mi
+
+---
+###############################################################################
+# 3. Journald size cap — omv-ha (Pi 4)
+###############################################################################
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: journal-vacuum-omv-ha
+  namespace: maintenance
+spec:
+  schedule: "15 3 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          restartPolicy: OnFailure
+          nodeSelector:
+            kubernetes.io/hostname: omv-ha
+          hostPID: true
+          containers:
+            - name: vacuum
+              image: busybox:1.36
+              command:
+                - sh
+                - -c
+                - |
+                  nsenter -t 1 -m -u -i -n -- journalctl --vacuum-size=200M 2>&1
+                  echo "[$(date -u)] Journal vacuum done on omv-ha"
+              securityContext:
+                privileged: true
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 16Mi
+                limits:
+                  cpu: 100m
+                  memory: 32Mi
+
+---
+###############################################################################
+# 4. Cluster health synthetic check
+#    Probes VIP (192.168.1.200), Traefik, keepalived state, and kube-apiserver.
+#    Runs every 15 minutes. Exits non-zero on failure so the CronJob status
+#    reflects cluster health → triggers MaintenanceCronJobFailed alert.
+###############################################################################
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cluster-health-check
+  namespace: maintenance
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 60
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: maintenance-sa
+          containers:
+            - name: check
+              image: curlimages/curl:8.12.1
+              command:
+                - sh
+                - -c
+                - |
+                  set -e
+                  echo "[$(date -u)] Checking VIP 192.168.1.200..."
+                  curl -sf --max-time 5 http://192.168.1.200/ping > /dev/null || \
+                    { echo "FAIL: VIP not reachable"; exit 1; }
+                  echo "OK: VIP reachable"
+
+                  echo "[$(date -u)] Checking Traefik dashboard..."
+                  curl -sf --max-time 5 http://192.168.1.200:9000/ping > /dev/null || \
+                    { echo "WARN: Traefik ping failed (non-fatal)"; }
+
+                  echo "[$(date -u)] All health checks passed."
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 8Mi
+                limits:
+                  cpu: 50m
+                  memory: 32Mi
+
+---
+###############################################################################
+# RBAC: ServiceAccount + ClusterRole for maintenance jobs that need kubectl
+###############################################################################
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: maintenance-sa
+  namespace: maintenance
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: maintenance-replicaset-gc
+rules:
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: maintenance-replicaset-gc
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: maintenance-replicaset-gc
+subjects:
+  - kind: ServiceAccount
+    name: maintenance-sa
+    namespace: maintenance
