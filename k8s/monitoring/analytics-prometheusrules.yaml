@@ -1,0 +1,145 @@
+###############################################################################
+# PrometheusRules — analytics namespace
+# Covers: DuckDB API, Metabase, n8n health + PVC usage
+# Namespace: monitoring  (Prometheus rule selector is namespace-agnostic)
+###############################################################################
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: analytics-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prom
+spec:
+  groups:
+    # ── Analytics app health ─────────────────────────────────────────────────
+    - name: analytics.health
+      interval: 60s
+      rules:
+        - alert: DuckdbApiDown
+          expr: |
+            kube_deployment_status_replicas_ready{namespace="analytics", deployment="duckdb-api"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            namespace: analytics
+          annotations:
+            summary: "DuckDB API has no ready replicas"
+            description: "duckdb-api in analytics namespace has had 0 ready replicas for 5 minutes. Data queries and Metabase connections will fail."
+
+        - alert: MetabaseDown
+          expr: |
+            kube_deployment_status_replicas_ready{namespace="analytics", deployment="metabase"} == 0
+          for: 10m
+          labels:
+            severity: warning
+            namespace: analytics
+          annotations:
+            summary: "Metabase has no ready replicas"
+            description: "metabase in analytics namespace has had 0 ready replicas for 10 minutes (longer window because v0.55 Liquibase migrations take ~4 min on ARM)."
+
+        - alert: N8nDown
+          expr: |
+            kube_deployment_status_replicas_ready{namespace="n8n", deployment="n8n"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            namespace: n8n
+          annotations:
+            summary: "n8n workflow engine has no ready replicas"
+            description: "n8n in n8n namespace has had 0 ready replicas for 5 minutes. Workflows and webhooks are not executing."
+
+        - alert: AnalyticsPodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace=~"analytics|n8n"}[15m]) * 60 > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} is crash-looping"
+            description: "Pod {{ $labels.pod }} (container {{ $labels.container }}) in {{ $labels.namespace }} is restarting >0.5/min."
+
+    # ── PVC usage ────────────────────────────────────────────────────────────
+    - name: analytics.pvc
+      interval: 120s
+      rules:
+        - alert: PVCUsageHigh
+          expr: |
+            (
+              kubelet_volume_stats_used_bytes
+              / kubelet_volume_stats_capacity_bytes
+            ) > 0.80
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PVC {{ $labels.persistentvolumeclaim }} usage above 80%"
+            description: "PVC {{ $labels.persistentvolumeclaim }} in {{ $labels.namespace }} is {{ $value | humanizePercentage }} full. Expand or clean up data before it reaches 100%."
+
+        - alert: PVCUsageCritical
+          expr: |
+            (
+              kubelet_volume_stats_used_bytes
+              / kubelet_volume_stats_capacity_bytes
+            ) > 0.93
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PVC {{ $labels.persistentvolumeclaim }} usage above 93%"
+            description: "PVC {{ $labels.persistentvolumeclaim }} in {{ $labels.namespace }} is {{ $value | humanizePercentage }} full. Immediate action required."
+
+    # ── Analytics resource usage ─────────────────────────────────────────────
+    - name: analytics.resources
+      interval: 120s
+      rules:
+        - alert: DuckdbApiHighMemory
+          expr: |
+            container_memory_working_set_bytes{namespace="analytics", container="duckdb-api"}
+            / on(pod, namespace) kube_pod_container_resource_limits{namespace="analytics", container="duckdb-api", resource="memory"}
+            > 0.85
+          for: 10m
+          labels:
+            severity: warning
+            namespace: analytics
+          annotations:
+            summary: "DuckDB API memory above 85% of limit"
+            description: "duckdb-api is using {{ $value | humanizePercentage }} of its 1500Mi memory limit. A large query may be in progress or the limit needs raising."
+
+        - alert: MetabaseHighMemory
+          expr: |
+            container_memory_working_set_bytes{namespace="analytics", container="metabase"}
+            / on(pod, namespace) kube_pod_container_resource_limits{namespace="analytics", container="metabase", resource="memory"}
+            > 0.85
+          for: 10m
+          labels:
+            severity: warning
+            namespace: analytics
+          annotations:
+            summary: "Metabase memory above 85% of limit"
+            description: "metabase is using {{ $value | humanizePercentage }} of its 1536Mi memory limit."
+
+    # ── Maintenance job health ────────────────────────────────────────────────
+    - name: maintenance.jobs
+      interval: 300s
+      rules:
+        - alert: MaintenanceCronJobFailed
+          expr: |
+            kube_job_failed{namespace="maintenance"} > 0
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Maintenance job {{ $labels.job_name }} failed"
+            description: "Job {{ $labels.job_name }} in the maintenance namespace has failed. Check logs: kubectl logs -n maintenance -l job-name={{ $labels.job_name }}"
+
+        - alert: S3SyncJobNotRunning
+          expr: |
+            (time() - kube_cronjob_status_last_successful_time{namespace="maintenance", cronjob="s3-to-duckdb-sync"}) > 7200
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "S3→DuckDB sync has not run successfully in 2 hours"
+            description: "The s3-to-duckdb-sync CronJob last succeeded {{ $value | humanizeDuration }} ago. New analytics data may not be reaching the cluster."

@@ -140,6 +140,40 @@ alertmanager:
           resources:
             requests:
               storage: 2Gi
+  config:
+    global:
+      resolve_timeout: 5m
+    receivers:
+      - name: "null"
+      - name: oncall
+        webhook_configs:
+          - url: "http://oncall-engine.oncall.svc.cluster.local:8080/integrations/v1/alertmanager/aed2bf7d35817a5e8f27306c35d3/"
+            send_resolved: true
+            max_alerts: 50
+    route:
+      group_by: [namespace]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: oncall
+      routes:
+        - matchers:
+            - alertname = "Watchdog"
+          receiver: "null"
+        - matchers:
+            - severity = "info"
+          receiver: "null"
+    inhibit_rules:
+      - equal: [namespace, alertname]
+        source_matchers: [severity = critical]
+        target_matchers: ["severity =~ warning|info"]
+      - equal: [namespace, alertname]
+        source_matchers: [severity = warning]
+        target_matchers: [severity = info]
+      - equal: [namespace]
+        source_matchers: [alertname = InfoInhibitor]
+        target_matchers: [severity = info]
+      - target_matchers: [alertname = InfoInhibitor]
 
 # Grafana — comprehensive admin dashboard at NodePort 10000
 grafana:
