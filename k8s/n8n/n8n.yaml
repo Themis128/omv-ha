@@ -32,14 +32,10 @@ metadata:
   namespace: n8n
 type: Opaque
 stringData:
-  # Generate: openssl rand -hex 32
-  N8N_ENCRYPTION_KEY: "REPLACE_WITH_openssl_rand_hex_32"
-  # Notion internal integration token
-  NOTION_API_KEY: "REPLACE_WITH_notion_token"
-  # Anthropic API key for Claude nodes
-  ANTHROPIC_API_KEY: "REPLACE_WITH_anthropic_key"
-  # Slack webhook for notifications
-  SLACK_WEBHOOK_URL: "REPLACE_WITH_slack_webhook"
+  N8N_ENCRYPTION_KEY: "REDACTED_N8N_ENCRYPTION_KEY"
+  NOTION_API_TOKEN: "REDACTED_NOTION_TOKEN"
+  ANTHROPIC_API_KEY: "REDACTED_ANTHROPIC_KEY"
+  SLACK_WEBHOOK_URL: "https://hooks.slack.com/services/T09AF5VTK4G/B0ARPA1F067/REDACTED_SLACK_WEBHOOK_TOKEN"
 
 ---
 apiVersion: apps/v1
@@ -93,7 +89,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: n8n-secrets
-                  key: NOTION_API_KEY
+                  key: NOTION_API_TOKEN
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:

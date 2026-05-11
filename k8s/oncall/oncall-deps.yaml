@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oncall
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oncall-mariadb-secret
+  namespace: oncall
+type: Opaque
+stringData:
+  MYSQL_ROOT_PASSWORD: "OncallRoot2026!"
+  MYSQL_PASSWORD: "OncallDB2026!"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: oncall-mariadb
+  namespace: oncall
+spec:
+  serviceName: oncall-mariadb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oncall-mariadb
+  template:
+    metadata:
+      labels:
+        app: oncall-mariadb
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: omv
+      containers:
+      - name: mariadb
+        image: mariadb:11
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: oncall-mariadb-secret
+              key: MYSQL_ROOT_PASSWORD
+        - name: MYSQL_DATABASE
+          value: oncall
+        - name: MYSQL_USER
+          value: oncall
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: oncall-mariadb-secret
+              key: MYSQL_PASSWORD
+        ports:
+        - containerPort: 3306
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oncall-mariadb
+  namespace: oncall
+spec:
+  selector:
+    app: oncall-mariadb
+  ports:
+  - port: 3306
+    targetPort: 3306
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oncall-redis
+  namespace: oncall
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oncall-redis
+  template:
+    metadata:
+      labels:
+        app: oncall-redis
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: omv
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 50m
+          limits:
+            memory: 128Mi
+            cpu: 200m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oncall-redis
+  namespace: oncall
+spec:
+  selector:
+    app: oncall-redis
+  ports:
+  - port: 6379
+    targetPort: 6379
