@@ -90,16 +90,17 @@ def main():
     df["cluster_id"] = cluster_ids
     df["segment"] = [label_segment(c, centers_scaled) for c in cluster_ids]
 
-    # RFM score: normalize each dimension to 1-5, sum → 3-15
+    # RFM score: rank-based quintile (1–5) — robust to duplicate values
     scaler = pipeline.named_steps["scaler"]
     X_scaled = scaler.transform(X)
-    # Invert recency (lower is better)
-    r_score = pd.qcut(-X_scaled[:, 0], 5, labels=[1, 2, 3, 4, 5], duplicates="drop").astype(float)
-    f_score = pd.qcut(X_scaled[:, 1], 5, labels=[1, 2, 3, 4, 5], duplicates="drop").astype(float)
-    m_score = pd.qcut(X_scaled[:, 2], 5, labels=[1, 2, 3, 4, 5], duplicates="drop").astype(float)
-    df["r_score"] = r_score.fillna(3)
-    df["f_score"] = f_score.fillna(3)
-    df["m_score"] = m_score.fillna(3)
+
+    def quintile(arr, invert=False):
+        s = pd.Series(-arr if invert else arr)
+        return np.ceil(s.rank(pct=True, method="average") * 5).clip(1, 5)
+
+    df["r_score"] = quintile(X_scaled[:, 0], invert=True)  # lower recency = better
+    df["f_score"] = quintile(X_scaled[:, 1])
+    df["m_score"] = quintile(X_scaled[:, 2])
     df["rfm_score"] = df["r_score"] + df["f_score"] + df["m_score"]
 
     df["scored_at"] = datetime.now(timezone.utc).isoformat()
