@@ -8,6 +8,7 @@ import { registerCloudflareTools } from "./tools/cloudflare.js";
 import { registerHelmTools } from "./tools/helm.js";
 import { registerGithubTools } from "./tools/github.js";
 import { registerMetabaseTools } from "./tools/metabase.js";
+import { registerMlTools } from "./tools/ml.js";
 
 const server = new McpServer({
   name: "cloudless-infra",
@@ -23,6 +24,7 @@ registerCloudflareTools(server);
 registerHelmTools(server);
 registerGithubTools(server);
 registerMetabaseTools(server);
+registerMlTools(server);
 
 // Start the stdio transport
 const transport = new StdioServerTransport();
