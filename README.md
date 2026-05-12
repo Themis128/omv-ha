@@ -52,6 +52,10 @@ All secrets are created manually (`kubectl create secret`) and are **not** store
 | `oncall-basicauth` | oncall | `users` (htpasswd format) |
 | `aws-creds` | monitoring | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (Grafana CloudWatch) |
 
+> Note: no actual credential values are committed in this repo. Create secrets manually with `kubectl create secret` or other secret management tooling, and keep values out of source control.
+> 
+> For k3s etcd S3 snapshots, use `k8s/ha/scripts/enable-s3-snapshots.sh` or runtime secret injection instead of embedding AWS keys in config files.
+
 ## Deploy order (fresh cluster)
 
 ```bash

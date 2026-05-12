@@ -29,9 +29,10 @@ kubelet-arg:
 etcd-snapshot-schedule-cron: "0 */6 * * *"
 etcd-snapshot-retention: 3
 etcd-s3: true
+# Note: Do not commit AWS creds. Fill them at runtime or with the enable-s3-snapshots.sh script.
 etcd-s3-bucket: cloudless-etcd-snapshots
 etcd-s3-region: us-east-1
 etcd-s3-folder: etcd
-etcd-s3-access-key: AKIAUBXIAELUYMUPWXLG
-etcd-s3-secret-key: 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
+# etcd-s3-access-key: "<AWS_ACCESS_KEY_ID>"
+# etcd-s3-secret-key: "<AWS_SECRET_ACCESS_KEY>"
 etcd-s3-insecure: false
