@@ -11,9 +11,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Runtime dependencies only (no build tools needed — all packages are pure wheels)
+# Runtime dependencies — libgomp1 is required by LightGBM on slim images
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
-    curl ca-certificates \
+    curl ca-certificates libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
