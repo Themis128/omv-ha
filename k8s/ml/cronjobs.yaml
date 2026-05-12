@@ -1,0 +1,334 @@
+###############################################################################
+# ML Pipeline CronJobs — Phase 1
+# All jobs run on omv (Pi 5, arm64, 8GB).
+# All DuckDB access is via duckdb-api REST — no direct PVC mount.
+# concurrencyPolicy: Forbid prevents overlapping runs.
+# Schedules are staggered to avoid concurrent RAM spikes.
+###############################################################################
+
+# ── Shared env vars (referenced in each CronJob) ─────────────────────────────
+# - DUCKDB_API_URL  : internal cluster URL of duckdb-api
+# - ML_ADMIN_TOKEN  : write-gate token for /execute endpoint
+# - AWS_*           : from duckdb-api-secrets (same secret reused)
+# - ANALYTICS_S3_BUCKET : from duckdb-api-secrets
+
+---
+# ── ml-feature-engineer ───────────────────────────────────────────────────────
+# Reads raw tables, computes features, writes Parquet to S3 + DuckDB views
+# Schedule: Sunday 01:00 UTC — MUST run before training jobs
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ml-feature-engineer
+  namespace: analytics
+  labels:
+    app: ml-pipeline
+    job: feature-engineer
+spec:
+  schedule: "0 1 * * 0"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: omv
+          containers:
+            - name: feature-engineer
+              image: ghcr.io/themis128/ml-pipeline:latest
+              imagePullPolicy: Always
+              command: ["python", "/scripts/feature_engineer.py"]
+              env:
+                - name: DUCKDB_API_URL
+                  value: "http://duckdb-api.analytics.svc.cluster.local"
+                - name: DUCKDB_TIMEOUT
+                  value: "120"
+              envFrom:
+                - secretRef:
+                    name: duckdb-api-secrets
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  cpu: 800m
+                  memory: 512Mi
+
+---
+# ── ml-train-rfm ──────────────────────────────────────────────────────────────
+# KMeans RFM segmentation — runs 2h after feature engineer
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ml-train-rfm
+  namespace: analytics
+  labels:
+    app: ml-pipeline
+    job: train-rfm
+spec:
+  schedule: "0 3 * * 0"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: omv
+          containers:
+            - name: train-rfm
+              image: ghcr.io/themis128/ml-pipeline:latest
+              imagePullPolicy: Always
+              command: ["python", "/scripts/train_rfm.py"]
+              env:
+                - name: DUCKDB_API_URL
+                  value: "http://duckdb-api.analytics.svc.cluster.local"
+              envFrom:
+                - secretRef:
+                    name: duckdb-api-secrets
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  cpu: 1000m
+                  memory: 768Mi
+
+---
+# ── ml-train-churn ────────────────────────────────────────────────────────────
+# LightGBM churn prediction — runs 1h after RFM
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ml-train-churn
+  namespace: analytics
+  labels:
+    app: ml-pipeline
+    job: train-churn
+spec:
+  schedule: "0 4 * * 0"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: omv
+          containers:
+            - name: train-churn
+              image: ghcr.io/themis128/ml-pipeline:latest
+              imagePullPolicy: Always
+              command: ["python", "/scripts/train_churn.py"]
+              env:
+                - name: DUCKDB_API_URL
+                  value: "http://duckdb-api.analytics.svc.cluster.local"
+              envFrom:
+                - secretRef:
+                    name: duckdb-api-secrets
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  cpu: 1000m
+                  memory: 768Mi
+
+---
+# ── ml-train-collab ───────────────────────────────────────────────────────────
+# TruncatedSVD collaborative filtering — nightly (independent of other training)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ml-train-collab
+  namespace: analytics
+  labels:
+    app: ml-pipeline
+    job: train-collab
+spec:
+  schedule: "0 2 * * *"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: omv
+          containers:
+            - name: train-collab
+              image: ghcr.io/themis128/ml-pipeline:latest
+              imagePullPolicy: Always
+              command: ["python", "/scripts/train_collab.py"]
+              env:
+                - name: DUCKDB_API_URL
+                  value: "http://duckdb-api.analytics.svc.cluster.local"
+              envFrom:
+                - secretRef:
+                    name: duckdb-api-secrets
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 384Mi
+                limits:
+                  cpu: 1000m
+                  memory: 1024Mi
+
+---
+# ── ml-train-anomaly ──────────────────────────────────────────────────────────
+# IsolationForest model training — weekly (Sunday 05:00, after churn training)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ml-train-anomaly
+  namespace: analytics
+  labels:
+    app: ml-pipeline
+    job: train-anomaly
+spec:
+  schedule: "0 5 * * 0"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: omv
+          containers:
+            - name: train-anomaly
+              image: ghcr.io/themis128/ml-pipeline:latest
+              imagePullPolicy: Always
+              command: ["python", "/scripts/train_anomaly.py"]
+              env:
+                - name: DUCKDB_API_URL
+                  value: "http://duckdb-api.analytics.svc.cluster.local"
+              envFrom:
+                - secretRef:
+                    name: duckdb-api-secrets
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  cpu: 800m
+                  memory: 512Mi
+
+---
+# ── ml-anomaly-detect ─────────────────────────────────────────────────────────
+# Score-only: loads cached model, scores latest 15-min window — runs every 15min
+# NOTE: Suspends automatically if no model exists in S3 yet (graceful exit)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ml-anomaly-detect
+  namespace: analytics
+  labels:
+    app: ml-pipeline
+    job: anomaly-detect
+spec:
+  schedule: "*/15 * * * *"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 120
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: omv
+          containers:
+            - name: anomaly-detect
+              image: ghcr.io/themis128/ml-pipeline:latest
+              imagePullPolicy: Always
+              command: ["python", "/scripts/detect_anomaly.py"]
+              env:
+                - name: DUCKDB_API_URL
+                  value: "http://duckdb-api.analytics.svc.cluster.local"
+                - name: ANOMALY_ALERT_WEBHOOK
+                  value: ""  # set to ntfy URL e.g. http://ntfy.ntfy.svc/analytics-alerts
+              envFrom:
+                - secretRef:
+                    name: duckdb-api-secrets
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+
+---
+# ── ml-content-decay ──────────────────────────────────────────────────────────
+# SQL-based content decay analysis — weekly Monday 02:00
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ml-content-decay
+  namespace: analytics
+  labels:
+    app: ml-pipeline
+    job: content-decay
+spec:
+  schedule: "0 2 * * 1"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            kubernetes.io/hostname: omv
+          containers:
+            - name: content-decay
+              image: ghcr.io/themis128/ml-pipeline:latest
+              imagePullPolicy: Always
+              command: ["python", "/scripts/content_decay.py"]
+              env:
+                - name: DUCKDB_API_URL
+                  value: "http://duckdb-api.analytics.svc.cluster.local"
+              envFrom:
+                - secretRef:
+                    name: duckdb-api-secrets
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
