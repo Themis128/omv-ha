@@ -42,7 +42,7 @@ spec:
           containers:
             - name: feature-engineer
               image: ghcr.io/themis128/ml-pipeline:latest
-              imagePullPolicy: Always
+              imagePullPolicy: IfNotPresent
               command: ["python", "/scripts/feature_engineer.py"]
               env:
                 - name: DUCKDB_API_URL
@@ -89,7 +89,7 @@ spec:
           containers:
             - name: train-rfm
               image: ghcr.io/themis128/ml-pipeline:latest
-              imagePullPolicy: Always
+              imagePullPolicy: IfNotPresent
               command: ["python", "/scripts/train_rfm.py"]
               env:
                 - name: DUCKDB_API_URL
@@ -134,7 +134,7 @@ spec:
           containers:
             - name: train-churn
               image: ghcr.io/themis128/ml-pipeline:latest
-              imagePullPolicy: Always
+              imagePullPolicy: IfNotPresent
               command: ["python", "/scripts/train_churn.py"]
               env:
                 - name: DUCKDB_API_URL
@@ -179,7 +179,7 @@ spec:
           containers:
             - name: train-collab
               image: ghcr.io/themis128/ml-pipeline:latest
-              imagePullPolicy: Always
+              imagePullPolicy: IfNotPresent
               command: ["python", "/scripts/train_collab.py"]
               env:
                 - name: DUCKDB_API_URL
@@ -224,7 +224,7 @@ spec:
           containers:
             - name: train-anomaly
               image: ghcr.io/themis128/ml-pipeline:latest
-              imagePullPolicy: Always
+              imagePullPolicy: IfNotPresent
               command: ["python", "/scripts/train_anomaly.py"]
               env:
                 - name: DUCKDB_API_URL
@@ -270,7 +270,7 @@ spec:
           containers:
             - name: anomaly-detect
               image: ghcr.io/themis128/ml-pipeline:latest
-              imagePullPolicy: Always
+              imagePullPolicy: IfNotPresent
               command: ["python", "/scripts/detect_anomaly.py"]
               env:
                 - name: DUCKDB_API_URL
@@ -317,7 +317,7 @@ spec:
           containers:
             - name: content-decay
               image: ghcr.io/themis128/ml-pipeline:latest
-              imagePullPolicy: Always
+              imagePullPolicy: IfNotPresent
               command: ["python", "/scripts/content_decay.py"]
               env:
                 - name: DUCKDB_API_URL
