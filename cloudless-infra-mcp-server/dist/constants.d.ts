@@ -28,6 +28,5 @@ export declare const LAMBDA_LOG_GROUP_PREFIX = "/aws/lambda/cloudless-";
 export declare const PI_SECONDARY_PORT = 18443;
 export declare const CHARACTER_LIMIT = 20000;
 export declare const CLOUDFLARE_API_TOKEN: string;
-export declare const CLOUDFLARE_ACCOUNT_ID: string;
 export declare const CLOUDFLARE_ZONE_ID: string;
 export declare const CLOUDFLARE_TUNNEL_ID = "a82f24a8-f767-4a59-bc77-1d59ad132be2";
