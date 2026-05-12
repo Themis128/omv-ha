@@ -135,11 +135,17 @@ def compute_churn_features(users_df: pd.DataFrame) -> pd.DataFrame:
 
     df = users_df.copy()
     df["last_order_date"] = pd.to_datetime(df["last_order_date"]).dt.date
+    df["signup_date"] = pd.to_datetime(df["signup_date"]).dt.date
 
     df["recency_days"] = df["last_order_date"].apply(
         lambda d: (today - d).days if pd.notna(d) else 999
     )
-    # Label: churned = no activity in last 30 days (for paid plans)
+    df["frequency"] = df["total_orders"].clip(upper=100)
+    df["monetary"] = df["total_revenue"].clip(upper=10000)
+    df["days_since_signup"] = df["signup_date"].apply(
+        lambda d: (today - d).days if pd.notna(d) else 0
+    )
+
     df["is_churned"] = (
         (df["recency_days"] > 30) & (df["plan_tier"] != "free")
     ).astype(int)
