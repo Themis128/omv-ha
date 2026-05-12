@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: duckdb-unlock
+  namespace: analytics
+spec:
+  ttlSecondsAfterFinished: 60
+  template:
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/hostname: omv
+      containers:
+      - name: unlock
+        image: ghcr.io/themis128/ml-pipeline:latest
+        imagePullPolicy: IfNotPresent
+        command:
+          - python
+          - -c
+          - |
+            import duckdb
+            conn = duckdb.connect('/data/analytics.duckdb', read_only=False)
+            conn.execute('CHECKPOINT')
+            conn.close()
+            print('Lock released, checkpoint done')
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: duckdb-data
