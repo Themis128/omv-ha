@@ -25,7 +25,7 @@ import time
 from contextlib import contextmanager
 
 import duckdb
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -36,6 +36,7 @@ DATA_DIR = os.getenv("DATA_DIR", "/data")
 S3_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
 S3_BUCKET = os.getenv("ANALYTICS_S3_BUCKET", "")
 MAX_ROWS = int(os.getenv("MAX_ROWS", "10000"))
+ML_ADMIN_TOKEN = os.getenv("ML_ADMIN_TOKEN", "")
 
 db_path = os.path.join(DATA_DIR, "analytics.duckdb")
 
@@ -151,6 +152,10 @@ class ParquetRequest(BaseModel):
     view_name: str
 
 
+class ExecuteRequest(BaseModel):
+    sql: str
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "db": "duckdb"}
@@ -209,4 +214,36 @@ def load_parquet(req: ParquetRequest):
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/execute")
+def execute(req: ExecuteRequest, x_ml_admin: str = Header(default=None)):
+    """Execute a mutating SQL statement (INSERT/UPDATE/CREATE TABLE).
+
+    Restricted to ML pipeline CronJobs via ML_ADMIN_TOKEN header.
+    Allows: INSERT, UPDATE, CREATE TABLE, CREATE OR REPLACE VIEW.
+    Blocks: DROP, DELETE, TRUNCATE, ALTER TABLE (for safety).
+    """
+    if not ML_ADMIN_TOKEN:
+        raise HTTPException(503, "ML_ADMIN_TOKEN not configured")
+    if x_ml_admin != ML_ADMIN_TOKEN:
+        raise HTTPException(403, "Forbidden: invalid ML admin token")
+
+    sql_upper = req.sql.strip().upper()
+    blocked = ("DROP TABLE", "DROP VIEW", "DROP DATABASE", "DELETE FROM",
+               "TRUNCATE", "ALTER TABLE", "ALTER DATABASE")
+    for stmt in blocked:
+        if sql_upper.startswith(stmt) or f"; {stmt}" in sql_upper:
+            raise HTTPException(400, f"Blocked statement: {stmt}")
+
+    try:
+        with get_conn(read_only=False) as conn:
+            conn.execute(req.sql)
+        log.info(f"ML /execute: {req.sql[:120]}")
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"/execute error: {e}\nSQL: {req.sql}")
         raise HTTPException(500, str(e))

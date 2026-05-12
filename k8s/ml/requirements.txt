@@ -1,0 +1,23 @@
+# ML Pipeline requirements — all packages have official arm64 (aarch64) wheels
+# Verified: manylinux_2_28_aarch64 wheels exist for all entries below
+
+# HTTP / API
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+requests==2.32.3
+pydantic==2.10.3
+
+# ML core (arm64 wheels confirmed)
+scikit-learn==1.5.2
+lightgbm==4.5.0
+joblib==1.4.2
+scipy==1.14.1
+numpy==1.26.4
+
+# Data
+pandas==2.2.3
+pyarrow==18.1.0
+
+# AWS
+boto3==1.35.76
+botocore==1.35.76
