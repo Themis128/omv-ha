@@ -33,10 +33,10 @@ metadata:
   namespace: analytics
 type: Opaque
 stringData:
-  AWS_ACCESS_KEY_ID: "AKIAUBXIAELUYMUPWXLG"
-  AWS_SECRET_ACCESS_KEY: "REDACTED_AWS_SECRET_OMVMAINCLI"
+  AWS_ACCESS_KEY_ID: "<AWS_ACCESS_KEY_ID>"
+  AWS_SECRET_ACCESS_KEY: "<AWS_SECRET_ACCESS_KEY>"
   ANALYTICS_S3_BUCKET: "cloudless-analytics-data"
-  ML_ADMIN_TOKEN: "zIV2hgvUb481sGOBX6ilZkfDtcwQ5njN"
+  ML_ADMIN_TOKEN: "<ML_ADMIN_TOKEN>"
 
 ---
 apiVersion: apps/v1
