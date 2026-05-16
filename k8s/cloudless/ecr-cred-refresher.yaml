@@ -50,7 +50,7 @@ spec:
           serviceAccountName: ecr-cred-refresher
           containers:
           - name: refresh
-            image: alpine/k8s:1.30.0
+            image: alpine/k8s:1.33.0
             command: ["/bin/sh", "-c"]
             args:
             - |

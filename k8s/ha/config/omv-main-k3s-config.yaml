@@ -32,6 +32,6 @@ etcd-s3: true
 etcd-s3-bucket: cloudless-etcd-snapshots
 etcd-s3-region: us-east-1
 etcd-s3-folder: etcd
-etcd-s3-access-key: AKIAUBXIAELUYMUPWXLG
-etcd-s3-secret-key: REDACTED_AWS_SECRET_OMVMAINCLI
+etcd-s3-access-key: AKIAUBXIAELU5SADA3XL
+etcd-s3-secret-key: kHA7DNJheDothk5rTfRPb4rWRw56OtXe3whE/QcC
 etcd-s3-insecure: false

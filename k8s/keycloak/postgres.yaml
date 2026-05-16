@@ -108,6 +108,12 @@ spec:
             command: ["pg_isready", "-U", "keycloak", "-d", "keycloak"]
           initialDelaySeconds: 10
           periodSeconds: 5
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "keycloak", "-d", "keycloak"]
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          failureThreshold: 5
       volumes:
       - name: data
         persistentVolumeClaim:

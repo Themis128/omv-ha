@@ -54,7 +54,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: auto-healer
-              image: alpine/k8s:1.30.0
+              image: alpine/k8s:1.33.0
               imagePullPolicy: IfNotPresent
               command: ["/bin/sh", "-c"]
               args:
