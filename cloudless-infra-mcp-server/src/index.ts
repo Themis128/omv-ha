@@ -10,6 +10,7 @@ import { registerGithubTools } from "./tools/github.js";
 import { registerMetabaseTools } from "./tools/metabase.js";
 import { registerMlTools } from "./tools/ml.js";
 import { registerFrontendTools } from "./tools/frontend.js";
+import { registerAppScanTools } from "./tools/app-scan.js";
 
 const server = new McpServer({
   name: "cloudless-infra",
@@ -27,6 +28,7 @@ registerGithubTools(server);
 registerMetabaseTools(server);
 registerMlTools(server);
 registerFrontendTools(server);
+registerAppScanTools(server);
 
 // Start the stdio transport
 const transport = new StdioServerTransport();
