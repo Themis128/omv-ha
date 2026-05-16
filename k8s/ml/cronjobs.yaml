@@ -276,7 +276,7 @@ spec:
                 - name: DUCKDB_API_URL
                   value: "http://duckdb-api.analytics.svc.cluster.local"
                 - name: ANOMALY_ALERT_WEBHOOK
-                  value: ""  # set to ntfy URL e.g. http://ntfy.ntfy.svc/analytics-alerts
+                  value: "http://ntfy.ntfy.svc.cluster.local/analytics-alerts"
               envFrom:
                 - secretRef:
                     name: duckdb-api-secrets
@@ -290,7 +290,8 @@ spec:
 
 ---
 # ── ml-content-decay ──────────────────────────────────────────────────────────
-# SQL-based content decay analysis — weekly Monday 02:00
+# SQL-based content decay analysis — weekly Monday 03:30
+# (shifted from 02:00 to avoid overlap with ml-train-collab which runs nightly at 02:00)
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -300,7 +301,7 @@ metadata:
     app: ml-pipeline
     job: content-decay
 spec:
-  schedule: "0 2 * * 1"
+  schedule: "30 3 * * 1"
   timeZone: "UTC"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
