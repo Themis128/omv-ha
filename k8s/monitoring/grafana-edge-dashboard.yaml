@@ -1,0 +1,313 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-edge-computing
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "Edge Computing"
+data:
+  edge-computing.json: |
+    {
+      "annotations": {"list": [{"builtIn": 1, "datasource": {"type": "grafana", "uid": "-- Grafana --"}, "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "type": "dashboard"}]},
+      "description": "Traefik ingress traffic, latency, TLS cert expiry, and node network I/O — edge view of the cloudless.online cluster.",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "id": 1, "type": "row", "title": "Traffic Overview",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}, "collapsed": false
+        },
+        {
+          "id": 2, "type": "stat", "title": "Requests / sec (websecure)",
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [{"expr": "sum(rate(traefik_entrypoint_requests_total{job=\"traefik\",entrypoint=\"websecure\"}[$__rate_interval]))", "legendFormat": "req/s", "refId": "A"}],
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "area", "textMode": "auto", "orientation": "auto"},
+          "fieldConfig": {"defaults": {"unit": "reqps", "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}}
+        },
+        {
+          "id": 3, "type": "stat", "title": "Error Rate %",
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [{"expr": "100 * sum(rate(traefik_entrypoint_requests_total{job=\"traefik\",entrypoint=\"websecure\",code=~\"4..|5..\"}[$__rate_interval])) / sum(rate(traefik_entrypoint_requests_total{job=\"traefik\",entrypoint=\"websecure\"}[$__rate_interval]))", "legendFormat": "error %", "refId": "A"}],
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "area", "textMode": "auto", "orientation": "auto"},
+          "fieldConfig": {"defaults": {"unit": "percent", "decimals": 2, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]}}}
+        },
+        {
+          "id": 4, "type": "stat", "title": "Open Connections (websecure)",
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [{"expr": "sum(traefik_open_connections{job=\"traefik\",entrypoint=\"websecure\"})", "legendFormat": "connections", "refId": "A"}],
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "area", "textMode": "auto", "orientation": "auto"},
+          "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 50}, {"color": "red", "value": 200}]}}}
+        },
+        {
+          "id": 5, "type": "stat", "title": "Bandwidth In+Out (websecure)",
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [{"expr": "sum(rate(traefik_entrypoint_requests_bytes_total{job=\"traefik\",entrypoint=\"websecure\"}[$__rate_interval])) + sum(rate(traefik_entrypoint_responses_bytes_total{job=\"traefik\",entrypoint=\"websecure\"}[$__rate_interval]))", "legendFormat": "bytes/s", "refId": "A"}],
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "area", "textMode": "auto", "orientation": "auto"},
+          "fieldConfig": {"defaults": {"unit": "Bps", "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}}
+        },
+        {
+          "id": 10, "type": "row", "title": "Latency & Throughput",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5}, "collapsed": false
+        },
+        {
+          "id": 11, "type": "timeseries", "title": "Latency Percentiles — websecure entrypoint",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [
+            {"expr": "histogram_quantile(0.50, sum(rate(traefik_entrypoint_request_duration_seconds_bucket{job=\"traefik\",entrypoint=\"websecure\"}[$__rate_interval])) by (le)) * 1000", "legendFormat": "P50", "refId": "A"},
+            {"expr": "histogram_quantile(0.95, sum(rate(traefik_entrypoint_request_duration_seconds_bucket{job=\"traefik\",entrypoint=\"websecure\"}[$__rate_interval])) by (le)) * 1000", "legendFormat": "P95", "refId": "B"},
+            {"expr": "histogram_quantile(0.99, sum(rate(traefik_entrypoint_request_duration_seconds_bucket{job=\"traefik\",entrypoint=\"websecure\"}[$__rate_interval])) by (le)) * 1000", "legendFormat": "P99", "refId": "C"}
+          ],
+          "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"showLegend": true, "displayMode": "list", "placement": "bottom"}},
+          "fieldConfig": {
+            "defaults": {"unit": "ms", "custom": {"lineWidth": 2}},
+            "overrides": [
+              {"matcher": {"id": "byName", "options": "P99"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+              {"matcher": {"id": "byName", "options": "P95"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]},
+              {"matcher": {"id": "byName", "options": "P50"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]}
+            ]
+          }
+        },
+        {
+          "id": 12, "type": "timeseries", "title": "Requests / sec — Top 10 Services",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [{"expr": "topk(10, sum by (service) (rate(traefik_service_requests_total{job=\"traefik\"}[$__rate_interval])))", "legendFormat": "{{service}}", "refId": "A"}],
+          "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"showLegend": true, "displayMode": "list", "placement": "bottom"}},
+          "fieldConfig": {"defaults": {"unit": "reqps"}}
+        },
+        {
+          "id": 20, "type": "row", "title": "HTTP Status Codes & Errors",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 14}, "collapsed": false
+        },
+        {
+          "id": 21, "type": "timeseries", "title": "Response Codes / sec",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 15},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [{"expr": "sum by (code) (rate(traefik_entrypoint_requests_total{job=\"traefik\",entrypoint=\"websecure\"}[$__rate_interval]))", "legendFormat": "HTTP {{code}}", "refId": "A"}],
+          "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"showLegend": true, "displayMode": "list", "placement": "bottom"}},
+          "fieldConfig": {
+            "defaults": {"unit": "reqps"},
+            "overrides": [
+              {"matcher": {"id": "byRegexp", "options": "HTTP 5.."}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+              {"matcher": {"id": "byRegexp", "options": "HTTP 4.."}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]},
+              {"matcher": {"id": "byRegexp", "options": "HTTP 2.."}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+              {"matcher": {"id": "byRegexp", "options": "HTTP 3.."}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]}
+            ]
+          }
+        },
+        {
+          "id": 22, "type": "timeseries", "title": "P95 Latency by Service (top 10)",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 15},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [{"expr": "topk(10, histogram_quantile(0.95, sum by (service, le) (rate(traefik_service_request_duration_seconds_bucket{job=\"traefik\"}[$__rate_interval]))) * 1000)", "legendFormat": "{{service}}", "refId": "A"}],
+          "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"showLegend": true, "displayMode": "list", "placement": "bottom"}},
+          "fieldConfig": {"defaults": {"unit": "ms"}}
+        },
+        {
+          "id": 30, "type": "row", "title": "TLS Certificates",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23}, "collapsed": false
+        },
+        {
+          "id": 31, "type": "table", "title": "TLS Certificate Expiry",
+          "gridPos": {"h": 8, "w": 14, "x": 0, "y": 24},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [{"expr": "(traefik_tls_certs_not_after{job=\"traefik\"} - time()) / 86400", "legendFormat": "{{cn}}", "refId": "A", "instant": true, "format": "table"}],
+          "transformations": [
+            {"id": "organize", "options": {"excludeByName": {"Time": true, "__name__": true, "instance": true, "job": true, "serial": true}, "renameByName": {"cn": "Domain", "sans": "SANs", "Value": "Days Until Expiry"}}}
+          ],
+          "options": {"sortBy": [{"displayName": "Days Until Expiry", "desc": false}], "footer": {"show": false}},
+          "fieldConfig": {
+            "defaults": {"unit": "d", "decimals": 0},
+            "overrides": [{"matcher": {"id": "byName", "options": "Days Until Expiry"}, "properties": [{"id": "custom.displayMode", "value": "color-background"}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 14}, {"color": "yellow", "value": 30}, {"color": "green", "value": 60}]}}]}]
+          }
+        },
+        {
+          "id": 32, "type": "gauge", "title": "Min Days to Any Cert Expiry",
+          "gridPos": {"h": 8, "w": 10, "x": 14, "y": 24},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [{"expr": "min((traefik_tls_certs_not_after{job=\"traefik\"} - time()) / 86400)", "legendFormat": "days", "refId": "A", "instant": true}],
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "showThresholdLabels": true, "showThresholdMarkers": true},
+          "fieldConfig": {"defaults": {"unit": "d", "decimals": 0, "min": 0, "max": 90, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 14}, {"color": "yellow", "value": 30}, {"color": "green", "value": 60}]}}}
+        },
+        {
+          "id": 40, "type": "row", "title": "Node Network & Connectivity",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32}, "collapsed": false
+        },
+        {
+          "id": 41, "type": "timeseries", "title": "Node Network Throughput",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 33},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [
+            {"expr": "sum by (instance) (rate(node_network_receive_bytes_total{device!~\"lo|veth.*|cni.*|flannel.*|cali.*\"}[$__rate_interval]))", "legendFormat": "↓ {{instance}}", "refId": "A"},
+            {"expr": "-sum by (instance) (rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|cni.*|flannel.*|cali.*\"}[$__rate_interval]))", "legendFormat": "↑ {{instance}}", "refId": "B"}
+          ],
+          "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"showLegend": true, "displayMode": "list", "placement": "bottom"}},
+          "fieldConfig": {"defaults": {"unit": "Bps", "custom": {"lineWidth": 2}}}
+        },
+        {
+          "id": 42, "type": "timeseries", "title": "Open Connections by Entrypoint & Protocol",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 33},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [{"expr": "traefik_open_connections{job=\"traefik\"}", "legendFormat": "{{entrypoint}} / {{protocol}}", "refId": "A"}],
+          "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"showLegend": true, "displayMode": "list", "placement": "bottom"}},
+          "fieldConfig": {"defaults": {"unit": "short"}}
+        },
+        {
+          "id": 50, "type": "row", "title": "Bandwidth Detail",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 41}, "collapsed": false
+        },
+        {
+          "id": 51, "type": "timeseries", "title": "Bytes Received / sec by Entrypoint",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 42},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [{"expr": "sum by (entrypoint) (rate(traefik_entrypoint_requests_bytes_total{job=\"traefik\"}[$__rate_interval]))", "legendFormat": "↓ {{entrypoint}}", "refId": "A"}],
+          "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"showLegend": true}},
+          "fieldConfig": {"defaults": {"unit": "Bps"}}
+        },
+        {
+          "id": 52, "type": "timeseries", "title": "Bytes Sent / sec by Entrypoint",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 42},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [{"expr": "sum by (entrypoint) (rate(traefik_entrypoint_responses_bytes_total{job=\"traefik\"}[$__rate_interval]))", "legendFormat": "↑ {{entrypoint}}", "refId": "A"}],
+          "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"showLegend": true}},
+          "fieldConfig": {"defaults": {"unit": "Bps"}}
+        },
+        {
+          "id": 60, "type": "row", "title": "Geolocation & Traffic Origins",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 50}, "collapsed": false
+        },
+        {
+          "id": 61, "type": "geomap", "title": "Requests by Country (last 24h)",
+          "gridPos": {"h": 12, "w": 24, "x": 0, "y": 51},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [
+            {
+              "expr": "sum by (country_code) (cloudflare_zone_country_requests_total)",
+              "legendFormat": "{{country_code}}",
+              "refId": "A",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {"id": "labelsToFields", "options": {}},
+            {"id": "merge", "options": {}}
+          ],
+          "options": {
+            "view": {"id": "zero", "lat": 20, "lon": 0, "zoom": 1.5},
+            "controls": {"showZoom": true, "mouseWheelZoom": false, "showAttribution": true, "showScale": false, "showDebug": false},
+            "tooltip": {"mode": "details"},
+            "layers": [
+              {
+                "type": "markers",
+                "name": "Countries",
+                "config": {
+                  "style": {
+                    "size": {"fixed": 5, "min": 3, "max": 40, "field": "Value"},
+                    "color": {"field": "Value", "fixed": "dark-green"},
+                    "opacity": 0.75,
+                    "symbol": {"fixed": "img/icons/marker/circle.svg"},
+                    "symbolAlign": {"h": "center", "v": "center"}
+                  },
+                  "showLegend": true
+                },
+                "location": {"mode": "lookup", "gazetteer": "countries", "lookup": "country_code"},
+                "tooltip": true
+              }
+            ]
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "continuous-GrYlRd"},
+              "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 500}, {"color": "red", "value": 5000}]}
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 62, "type": "barchart", "title": "Top 15 Countries by Requests (last 24h)",
+          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 63},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [
+            {
+              "expr": "topk(15, sum by (country_code) (cloudflare_zone_country_requests_total))",
+              "legendFormat": "{{country_code}}",
+              "refId": "A",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            {"id": "labelsToFields", "options": {}},
+            {"id": "merge", "options": {}},
+            {"id": "sortBy", "options": {"fields": [{"displayName": "Value", "desc": true}]}}
+          ],
+          "options": {
+            "orientation": "horizontal",
+            "groupWidth": 0.7,
+            "barWidth": 0.97,
+            "tooltip": {"mode": "single", "sort": "none"},
+            "legend": {"showLegend": false, "displayMode": "hidden"},
+            "xTickLabelRotation": 0,
+            "xTickLabelMaxLength": 0,
+            "xTickLabelSpacing": 0,
+            "fillOpacity": 80
+          },
+          "fieldConfig": {
+            "defaults": {"unit": "short", "color": {"mode": "palette-classic"}},
+            "overrides": []
+          }
+        },
+        {
+          "id": 63, "type": "stat", "title": "Unique Countries",
+          "gridPos": {"h": 4, "w": 8, "x": 16, "y": 63},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [
+            {
+              "expr": "count(sum by (country_code) (cloudflare_zone_country_requests_total))",
+              "legendFormat": "countries",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "auto", "orientation": "auto"},
+          "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}}
+        },
+        {
+          "id": 64, "type": "stat", "title": "Total Requests (last 24h via CF)",
+          "gridPos": {"h": 4, "w": 8, "x": 16, "y": 67},
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "targets": [
+            {
+              "expr": "sum(cloudflare_zone_country_requests_total)",
+              "legendFormat": "total",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "auto", "orientation": "auto"},
+          "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}}
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 38,
+      "tags": ["edge", "traefik", "cloudless", "ingress", "tls", "geolocation"],
+      "templating": {"list": [{"current": {}, "hide": 0, "includeAll": false, "label": "Datasource", "multi": false, "name": "datasource", "options": [], "query": "prometheus", "refresh": 1, "regex": "", "sort": 0, "type": "datasource"}]},
+      "time": {"from": "now-1h", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Edge Computing — Traffic & Ingress",
+      "uid": "cloudless-edge-01",
+      "version": 2
+    }

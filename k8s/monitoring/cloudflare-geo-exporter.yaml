@@ -1,0 +1,254 @@
+---
+# Cloudflare Geo Exporter
+# Polls CF Analytics GraphQL API every 5 min (httpRequests1hGroups, last 24 buckets)
+# Exposes: cloudflare_zone_country_requests_total{country_code="GR"} on :9101/metrics
+# Scrapes CF_TOKEN + CF_ZONE_ID from cloudless-manager-secrets (namespace: cloudless)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflare-geo-exporter-script
+  namespace: monitoring
+data:
+  exporter.py: |
+    #!/usr/bin/env python3
+    import os, time, json, http.server, threading, urllib.request
+    from datetime import datetime, timezone, timedelta
+
+    CF_TOKEN     = os.environ['CF_TOKEN']
+    CF_ZONE_ID   = os.environ['CF_ZONE_ID']
+    POLL_INTERVAL = int(os.environ.get('POLL_INTERVAL', '300'))
+    PORT          = int(os.environ.get('PORT', '9101'))
+
+    METRICS      = {}
+    METRICS_LOCK = threading.Lock()
+    LAST_ERROR   = {'msg': '', 'ts': 0}
+
+    # httpRequests1hGroups requires an explicit datetime filter (last 24h window)
+    QUERY_TMPL = '''{
+      "query": "{ viewer { zones(filter: {zoneTag: \\"%s\\"}) { httpRequests1hGroups(limit: 24 orderBy: [datetime_DESC] filter: {datetime_geq: \\"%s\\" datetime_lt: \\"%s\\"}) { dimensions { datetime } sum { countryMap { clientCountryName requests } } } } } }"
+    }'''
+
+    def build_query():
+        now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        start = now - timedelta(hours=24)
+        return QUERY_TMPL % (
+            CF_ZONE_ID,
+            start.strftime('%Y-%m-%dT%H:00:00Z'),
+            now.strftime('%Y-%m-%dT%H:00:00Z'),
+        )
+
+    # ISO 3166-1 alpha-2 lookup — common countries; fallback = first 2 chars uppercase
+    COUNTRY_CODES = {
+      "Albania": "AL", "Algeria": "DZ", "Argentina": "AR", "Australia": "AU",
+      "Austria": "AT", "Belarus": "BY", "Belgium": "BE", "Brazil": "BR",
+      "Bulgaria": "BG", "Canada": "CA", "Chile": "CL", "China": "CN",
+      "Colombia": "CO", "Croatia": "HR", "Cyprus": "CY", "Czech Republic": "CZ",
+      "Czechia": "CZ", "Denmark": "DK", "Egypt": "EG", "Estonia": "EE",
+      "Finland": "FI", "France": "FR", "Germany": "DE", "Ghana": "GH",
+      "Greece": "GR", "Hungary": "HU", "India": "IN", "Indonesia": "ID",
+      "Iran": "IR", "Iraq": "IQ", "Ireland": "IE", "Israel": "IL",
+      "Italy": "IT", "Japan": "JP", "Jordan": "JO", "Kazakhstan": "KZ",
+      "Kenya": "KE", "Kosovo": "XK", "Latvia": "LV", "Lebanon": "LB",
+      "Lithuania": "LT", "Luxembourg": "LU", "Malaysia": "MY", "Malta": "MT",
+      "Mexico": "MX", "Moldova": "MD", "Morocco": "MA", "Netherlands": "NL",
+      "New Zealand": "NZ", "Nigeria": "NG", "North Macedonia": "MK",
+      "Norway": "NO", "Pakistan": "PK", "Philippines": "PH", "Poland": "PL",
+      "Portugal": "PT", "Romania": "RO", "Russia": "RU", "Saudi Arabia": "SA",
+      "Serbia": "RS", "Singapore": "SG", "Slovakia": "SK", "Slovenia": "SI",
+      "South Africa": "ZA", "South Korea": "KR", "Spain": "ES", "Sweden": "SE",
+      "Switzerland": "CH", "Taiwan": "TW", "Thailand": "TH", "Turkey": "TR",
+      "Ukraine": "UA", "United Arab Emirates": "AE",
+      "United Kingdom": "GB", "United States": "US", "Vietnam": "VN",
+      "T1": "T1",  # Cloudflare uses T1 for Tor
+    }
+
+    def fetch_geo():
+        body = build_query().encode()
+        req = urllib.request.Request(
+            'https://api.cloudflare.com/client/v4/graphql',
+            data=body,
+            headers={
+                'Authorization': f'Bearer {CF_TOKEN}',
+                'Content-Type': 'application/json',
+            }
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read())
+        if 'errors' in result and result['errors']:
+            raise RuntimeError(str(result['errors']))
+        zones = result['data']['viewer']['zones']
+        if not zones:
+            raise RuntimeError('No zone data returned — check CF_ZONE_ID')
+        aggregated = {}
+        for hour_group in zones[0]['httpRequestsAdaptiveGroups'] if 'httpRequestsAdaptiveGroups' in str(zones[0]) else zones[0]['httpRequests1hGroups']:
+            for entry in hour_group['sum']['countryMap']:
+                name = entry['clientCountryName']
+                code = COUNTRY_CODES.get(name, name[:2].upper() if len(name) >= 2 else name)
+                aggregated[code] = aggregated.get(code, 0) + entry['requests']
+        return aggregated
+
+    def poll_loop():
+        while True:
+            try:
+                data = fetch_geo()
+                with METRICS_LOCK:
+                    METRICS.clear()
+                    METRICS.update(data)
+                    LAST_ERROR['msg'] = ''
+                print(f'[geo-exporter] updated {len(data)} countries', flush=True)
+            except Exception as e:
+                msg = str(e)
+                with METRICS_LOCK:
+                    LAST_ERROR['msg'] = msg
+                    LAST_ERROR['ts']  = int(time.time())
+                print(f'[geo-exporter] ERROR: {msg}', flush=True)
+            time.sleep(POLL_INTERVAL)
+
+    class MetricsHandler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args): pass
+
+        def do_GET(self):
+            if self.path not in ('/', '/metrics'):
+                self.send_response(404)
+                self.end_headers()
+                return
+            with METRICS_LOCK:
+                lines = [
+                    '# HELP cloudflare_zone_country_requests_total Total HTTP requests per country from CF Analytics (24h rolling, updated every 5m)',
+                    '# TYPE cloudflare_zone_country_requests_total gauge',
+                ]
+                for code, count in sorted(METRICS.items()):
+                    lines.append(f'cloudflare_zone_country_requests_total{{country_code="{code}"}} {count}')
+                if LAST_ERROR['msg']:
+                    lines += [
+                        '# HELP cloudflare_geo_exporter_last_error_timestamp Unix timestamp of last scrape error',
+                        '# TYPE cloudflare_geo_exporter_last_error_timestamp gauge',
+                        f'cloudflare_geo_exporter_last_error_timestamp {LAST_ERROR["ts"]}',
+                    ]
+                lines += [
+                    '# HELP cloudflare_geo_exporter_countries_total Number of distinct countries seen in last poll',
+                    '# TYPE cloudflare_geo_exporter_countries_total gauge',
+                    f'cloudflare_geo_exporter_countries_total {len(METRICS)}',
+                ]
+            body = '\n'.join(lines) + '\n'
+            enc  = body.encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8')
+            self.send_header('Content-Length', str(len(enc)))
+            self.end_headers()
+            self.wfile.write(enc)
+
+    if __name__ == '__main__':
+        threading.Thread(target=poll_loop, daemon=True).start()
+        print(f'[geo-exporter] listening on :{PORT}', flush=True)
+        http.server.HTTPServer(('0.0.0.0', PORT), MetricsHandler).serve_forever()
+
+---
+# One-time setup: mirror CF_TOKEN + CF_ZONE_ID into monitoring namespace
+# Run this ONCE before applying this manifest:
+#
+#   cluster_run_command(node="omv-main", command="""
+#     CF_TOKEN=$(kubectl get secret cloudless-manager-secrets -n cloudless -o jsonpath='{.data.CF_TOKEN}' | base64 -d)
+#     CF_ZONE_ID=$(kubectl get secret cloudless-manager-secrets -n cloudless -o jsonpath='{.data.CF_ZONE_ID}' | base64 -d)
+#     kubectl create secret generic cloudflare-geo-exporter-secrets -n monitoring \
+#       --from-literal=CF_TOKEN="$CF_TOKEN" \
+#       --from-literal=CF_ZONE_ID="$CF_ZONE_ID" \
+#       --dry-run=client -o yaml | kubectl apply -f -
+#   """)
+#
+# Refresh is automatic: the exporter polls CF every POLL_INTERVAL seconds.
+# Re-run the above if CF_TOKEN is rotated.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflare-geo-exporter
+  namespace: monitoring
+  labels:
+    app: cloudflare-geo-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflare-geo-exporter
+  template:
+    metadata:
+      labels:
+        app: cloudflare-geo-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9101"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Stateless — let scheduler pick; arm64 on both nodes
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: exporter
+          image: python:3.12-alpine
+          command: ["python3", "/app/exporter.py"]
+          ports:
+            - name: metrics
+              containerPort: 9101
+              protocol: TCP
+          env:
+            - name: CF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-geo-exporter-secrets
+                  key: CF_TOKEN
+            - name: CF_ZONE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-geo-exporter-secrets
+                  key: CF_ZONE_ID
+            - name: POLL_INTERVAL
+              value: "300"
+            - name: PORT
+              value: "9101"
+          volumeMounts:
+            - name: script
+              mountPath: /app
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9101
+            initialDelaySeconds: 10
+            periodSeconds: 60
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9101
+            initialDelaySeconds: 5
+            periodSeconds: 30
+      volumes:
+        - name: script
+          configMap:
+            name: cloudflare-geo-exporter-script
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudflare-geo-exporter
+  namespace: monitoring
+  labels:
+    app: cloudflare-geo-exporter
+spec:
+  selector:
+    app: cloudflare-geo-exporter
+  ports:
+    - name: metrics
+      port: 9101
+      targetPort: 9101
+      protocol: TCP
+  type: ClusterIP

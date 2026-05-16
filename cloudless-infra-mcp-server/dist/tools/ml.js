@@ -257,5 +257,76 @@ Use to verify the ml-feature-engineer job ran successfully before triggering tra
             : "```json\n" + r.stdout + "\n```";
         return { content: [{ type: "text", text }] };
     });
+    // ── ml_duckdb_unlock ──────────────────────────────────────────────────────
+    server.registerTool("ml_duckdb_unlock", {
+        title: "Fix DuckDB Stale Lock",
+        description: `Clear a stale PID-0 DuckDB file lock that causes HTTP 503 from duckdb-api.
+This happens when a process dies without releasing the lock embedded in the .duckdb file header.
+
+Recovery procedure (automated):
+1. Scale duckdb-api and metabase to 0 replicas (releases open file handles)
+2. Run a one-shot duckdb-api-local container via the duckdb-unlock Job manifest
+3. The Job connects to the DB, runs CHECKPOINT, and exits — releasing the lock
+4. Scale duckdb-api and metabase back to 1 replica
+
+⚠️  This takes ~30 seconds and briefly interrupts analytics access.
+Run ml_pipeline_status first to confirm the 503 is lock-related (not a code error).`,
+        inputSchema: z.object({
+            dry_run: z
+                .boolean()
+                .default(false)
+                .describe("If true, only show what would be done without making changes"),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false },
+    }, async ({ dry_run }) => {
+        if (dry_run) {
+            return {
+                content: [{
+                        type: "text",
+                        text: [
+                            "**DRY RUN — unlock procedure:**",
+                            "1. `kubectl scale deployment duckdb-api -n analytics --replicas=0`",
+                            "2. `kubectl scale deployment metabase -n analytics --replicas=0`",
+                            "3. `kubectl apply -f k8s/ml/duckdb-unlock-job.yaml` (Job: CHECKPOINT + exit)",
+                            "4. Wait for Job completion (~15s)",
+                            "5. `kubectl scale deployment duckdb-api -n analytics --replicas=1`",
+                            "6. `kubectl scale deployment metabase -n analytics --replicas=1`",
+                            "",
+                            "Run with dry_run=false to execute.",
+                        ].join("\n"),
+                    }],
+            };
+        }
+        const steps = [];
+        const run = async (label, cmd) => {
+            steps.push(`\n▶ ${label}`);
+            const r = await runOnNode("omv-main", cmd);
+            if (r.error)
+                throw new Error(`${label} failed: ${r.error}`);
+            if (r.stdout)
+                steps.push(r.stdout.trim());
+            if (r.stderr)
+                steps.push(`STDERR: ${r.stderr.trim()}`);
+        };
+        try {
+            await run("Scale duckdb-api to 0", `${KUBECTL} scale deployment duckdb-api -n ${NS} --replicas=0`);
+            await run("Scale metabase to 0", `${KUBECTL} scale deployment metabase -n ${NS} --replicas=0`);
+            await run("Wait for pods to terminate", `${KUBECTL} wait --for=delete pod -l app=duckdb-api -n ${NS} --timeout=30s 2>/dev/null || true`);
+            await run("Delete any previous unlock job", `${KUBECTL} delete job duckdb-unlock -n ${NS} --ignore-not-found`);
+            await run("Apply duckdb-unlock Job", `${KUBECTL} apply -f /root/omv-ha/k8s/ml/duckdb-unlock-job.yaml`);
+            await run("Wait for Job to complete", `${KUBECTL} wait --for=condition=complete job/duckdb-unlock -n ${NS} --timeout=60s`);
+            await run("Job logs", `${KUBECTL} logs -n ${NS} -l job-name=duckdb-unlock`);
+            await run("Scale duckdb-api back to 1", `${KUBECTL} scale deployment duckdb-api -n ${NS} --replicas=1`);
+            await run("Scale metabase back to 1", `${KUBECTL} scale deployment metabase -n ${NS} --replicas=1`);
+            await run("Verify duckdb-api health", `sleep 8 && ${KUBECTL} exec -n ${NS} deployment/duckdb-api -- curl -sf http://localhost:8000/health`);
+            steps.push("\n✅ DuckDB lock cleared — analytics stack is back online.");
+        }
+        catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            steps.push(`\n❌ Unlock failed at step: ${msg}`);
+            steps.push("You may need to scale deployments back up manually.");
+        }
+        return { content: [{ type: "text", text: "```\n" + steps.join("\n") + "\n```" }] };
+    });
 }
 //# sourceMappingURL=ml.js.map
