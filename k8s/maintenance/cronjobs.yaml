@@ -38,15 +38,20 @@ spec:
           serviceAccountName: maintenance-sa
           containers:
             - name: gc
-              image: bitnami/kubectl:1.33
+              image: alpine/k8s:1.33.0
               command:
                 - sh
                 - -c
                 - |
-                  echo "[$(date -u)] Deleting stale ReplicaSets (0/0/0 replicas)..."
-                  kubectl get rs -A \
-                    -o jsonpath='{range .items[?(@.spec.replicas==0)]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' \
-                    | while read ns name; do
+                  echo "[$(date -u)] Deleting stale ReplicaSets (0/0/0 replicas, older than 48h)..."
+                  CUTOFF=$(( $(date -u +%s) - 172800 ))
+                  kubectl get rs -A -o json | \
+                    jq -r --argjson cutoff "$CUTOFF" '.items[] |
+                      select(.spec.replicas == 0) |
+                      select(.status.replicas == 0) |
+                      select((.metadata.creationTimestamp | fromdateiso8601) < $cutoff) |
+                      [.metadata.namespace, .metadata.name] | @tsv' | \
+                    while IFS=$'\t' read -r ns name; do
                       kubectl delete rs -n "$ns" "$name" --ignore-not-found 2>&1 | grep -v "not found"
                     done
                   echo "[$(date -u)] Done."
