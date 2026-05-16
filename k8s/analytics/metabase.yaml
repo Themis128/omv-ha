@@ -45,8 +45,12 @@ spec:
           image: alpine:3
           command: [sh, -c]
           args:
-            - wget -q https://github.com/motherduckdb/metabase_duckdb_driver/releases/download/0.4.1/duckdb.metabase-driver.jar
-                -O /plugins/duckdb.metabase-driver.jar && chmod 777 /plugins && chmod 644 /plugins/duckdb.metabase-driver.jar && echo "DuckDB driver ready"
+            - |
+              wget -q https://github.com/motherduckdb/metabase_duckdb_driver/releases/download/0.4.1/duckdb.metabase-driver.jar \
+                -O /plugins/duckdb.metabase-driver.jar &&
+              echo "23a00260cc8d574e51c2e4cc35696e3f3da06ff7e52bb673a103da590f04fd0b  /plugins/duckdb.metabase-driver.jar" | sha256sum -c - &&
+              chmod 777 /plugins && chmod 644 /plugins/duckdb.metabase-driver.jar &&
+              echo "DuckDB driver ready"
           volumeMounts:
             - name: plugins
               mountPath: /plugins

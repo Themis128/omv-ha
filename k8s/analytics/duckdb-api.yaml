@@ -26,17 +26,14 @@ spec:
       storage: 10Gi
 
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: duckdb-api-secrets
-  namespace: analytics
-type: Opaque
-stringData:
-  AWS_ACCESS_KEY_ID: "AKIAUBXIAELUYMUPWXLG"
-  AWS_SECRET_ACCESS_KEY: "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"
-  ANALYTICS_S3_BUCKET: "cloudless-analytics-data"
-  ML_ADMIN_TOKEN: "zIV2hgvUb481sGOBX6ilZkfDtcwQ5njN"
+# SECRET — NOT COMMITTED. Create manually on the cluster:
+#   kubectl -n analytics create secret generic duckdb-api-secrets \
+#     --from-literal=AWS_ACCESS_KEY_ID=<key> \
+#     --from-literal=AWS_SECRET_ACCESS_KEY=<secret> \
+#     --from-literal=ANALYTICS_S3_BUCKET=cloudless-analytics-data \
+#     --from-literal=ML_ADMIN_TOKEN=<token>
+#
+# Rotate any credentials that were previously committed in plain text.
 
 ---
 apiVersion: apps/v1
