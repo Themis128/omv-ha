@@ -5,8 +5,8 @@ import { runOnNode } from "../services/ssh.js";
 const KUBECTL = "sudo k3s kubectl";
 const NS = "analytics";
 const DUCKDB_URL = "http://duckdb-api.analytics.svc.cluster.local";
-const ML_TOKEN = "zIV2hgvUb481sGOBX6ilZkfDtcwQ5njN";
-const S3_BUCKET = "cloudless-analytics-data";
+const ML_TOKEN = process.env.ML_ADMIN_TOKEN ?? "<ML_ADMIN_TOKEN>";
+const S3_BUCKET = process.env.ANALYTICS_S3_BUCKET ?? "cloudless-analytics-data";
 
 const CRONJOBS = [
   "ml-feature-engineer",
