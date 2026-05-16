@@ -222,6 +222,10 @@ grafana:
     dashboards:
       enabled: true
       searchNamespace: ALL
+      folder: /var/lib/grafana/dashboards
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
     datasources:
       enabled: true
       alertmanager:
@@ -349,6 +353,14 @@ grafana:
           editable: true
           options:
             path: /var/lib/grafana/dashboards/infra
+        - name: edge
+          orgId: 1
+          folder: "Edge Computing"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/edge
 
   # Community dashboards — auto-imported on deploy
   dashboards:
