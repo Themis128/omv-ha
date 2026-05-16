@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cluster Improvement Report — 2026-05-16</title>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --surface2: #1a1a24;
+      --border: #2a2a38;
+      --border2: #3a3a50;
+      --text: #e8e8f0;
+      --text2: #9090a8;
+      --text3: #5a5a72;
+      --accent: #8b5cf6;
+      --accent2: #a78bfa;
+      --accent-dim: rgba(139,92,246,0.12);
+      --green: #22c55e;
+      --green-dim: rgba(34,197,94,0.12);
+      --yellow: #eab308;
+      --yellow-dim: rgba(234,179,8,0.12);
+      --red: #ef4444;
+      --red-dim: rgba(239,68,68,0.12);
+      --blue: #3b82f6;
+      --blue-dim: rgba(59,130,246,0.12);
+      --orange: #f97316;
+      --orange-dim: rgba(249,115,22,0.12);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      border-bottom: 1px solid var(--border);
+      padding: 32px 48px 28px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+    }
+    .header-left { display: flex; flex-direction: column; gap: 6px; }
+    .badge-row { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .badge-purple { background: var(--accent-dim); color: var(--accent2); border: 1px solid rgba(139,92,246,.25); }
+    .badge-green  { background: var(--green-dim);  color: var(--green);   border: 1px solid rgba(34,197,94,.25);  }
+    .badge-blue   { background: var(--blue-dim);   color: var(--blue);    border: 1px solid rgba(59,130,246,.25);  }
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -.02em;
+      color: var(--text);
+    }
+    h1 span { color: var(--accent2); }
+    .subtitle { color: var(--text2); font-size: 13px; }
+    .header-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .meta { font-size: 12px; color: var(--text3); }
+    .status-pill {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--green-dim); border: 1px solid rgba(34,197,94,.3);
+      border-radius: 20px; padding: 4px 12px;
+      font-size: 12px; font-weight: 600; color: var(--green);
+    }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* ── Layout ── */
+    .main { padding: 36px 48px; display: flex; flex-direction: column; gap: 40px; }
+
+    /* ── Metrics row ── */
+    .metrics { display: grid; grid-template-columns: repeat(5,1fr); gap: 12px; }
+    .metric {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .metric-val {
+      font-size: 28px; font-weight: 700; letter-spacing: -.03em;
+      line-height: 1;
+    }
+    .metric-val.green { color: var(--green); }
+    .metric-val.purple { color: var(--accent2); }
+    .metric-val.blue { color: var(--blue); }
+    .metric-val.orange { color: var(--orange); }
+    .metric-val.yellow { color: var(--yellow); }
+    .metric-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; font-weight: 500; margin-top: 2px; }
+    .metric-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+    /* ── Section ── */
+    .section-title {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .1em; color: var(--text3);
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 14px;
+    }
+    .section-title::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
+    /* ── Cards grid ── */
+    .cards { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px; }
+    .cards.three { grid-template-columns: repeat(3,1fr); }
+    .cards.one { grid-template-columns: 1fr; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+      display: flex; flex-direction: column; gap: 12px;
+      transition: border-color .2s;
+    }
+    .card:hover { border-color: var(--border2); }
+    .card.accent-border { border-color: rgba(139,92,246,.3); }
+    .card.green-border  { border-color: rgba(34,197,94,.3); }
+    .card.red-border    { border-color: rgba(239,68,68,.3); }
+    .card.blue-border   { border-color: rgba(59,130,246,.3); }
+    .card.orange-border { border-color: rgba(249,115,22,.3); }
+
+    .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .card-icon {
+      width: 34px; height: 34px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+    }
+    .card-icon.purple { background: var(--accent-dim); }
+    .card-icon.green  { background: var(--green-dim);  }
+    .card-icon.red    { background: var(--red-dim);    }
+    .card-icon.blue   { background: var(--blue-dim);   }
+    .card-icon.orange { background: var(--orange-dim); }
+    .card-icon.yellow { background: var(--yellow-dim); }
+
+    .card-title { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.3; }
+    .card-desc  { font-size: 12px; color: var(--text2); line-height: 1.5; }
+
+    .tag {
+      font-size: 10px; font-weight: 600; letter-spacing: .04em;
+      text-transform: uppercase; padding: 2px 7px; border-radius: 4px;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .tag-fixed    { background: var(--green-dim);  color: var(--green);   }
+    .tag-security { background: var(--red-dim);    color: var(--red);     }
+    .tag-perf     { background: var(--blue-dim);   color: var(--blue);    }
+    .tag-cleanup  { background: var(--orange-dim); color: var(--orange);  }
+    .tag-docs     { background: var(--accent-dim); color: var(--accent2); }
+    .tag-warning  { background: var(--yellow-dim); color: var(--yellow);  }
+
+    /* ── KV list inside card ── */
+    .kv { display: flex; flex-direction: column; gap: 6px; }
+    .kv-row { display: flex; align-items: baseline; gap: 8px; }
+    .kv-key { font-size: 11px; color: var(--text3); min-width: 80px; flex-shrink: 0; }
+    .kv-val { font-size: 12px; color: var(--text); font-family: 'SF Mono','Fira Code',monospace; }
+    .kv-val.strike { text-decoration: line-through; color: var(--red); }
+    .kv-val.arrow  { color: var(--text3); margin: 0 2px; font-family: inherit; }
+    .kv-val.new    { color: var(--green); }
+
+    /* ── Change row ── */
+    .changes { display: flex; flex-direction: column; gap: 5px; }
+    .change-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .change-icon { font-size: 13px; flex-shrink: 0; }
+    .change-text { color: var(--text2); }
+    .change-text strong { color: var(--text); font-weight: 500; }
+    .change-code {
+      font-family: 'SF Mono','Fira Code',monospace;
+      font-size: 11px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 1px 5px; color: var(--text2);
+    }
+
+    /* ── Commit pill ── */
+    .commit {
+      font-family: 'SF Mono','Fira Code',monospace;
+      font-size: 10px; color: var(--accent2);
+      background: var(--accent-dim); border: 1px solid rgba(139,92,246,.2);
+      border-radius: 4px; padding: 1px 6px;
+    }
+
+    /* ── Diff block ── */
+    .diff {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 14px;
+      font-family: 'SF Mono','Fira Code',monospace; font-size: 11px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .diff-del { color: #f87171; }
+    .diff-add { color: #4ade80; }
+    .diff-ctx { color: var(--text3); }
+
+    /* ── Horizontal rule ── */
+    hr { border: none; border-top: 1px solid var(--border); }
+
+    /* ── Footer ── */
+    .footer {
+      border-top: 1px solid var(--border);
+      padding: 20px 48px;
+      display: flex; justify-content: space-between; align-items: center;
+      color: var(--text3); font-size: 11px;
+    }
+
+    /* ── Pending section ── */
+    .pending-list { display: flex; flex-direction: column; gap: 8px; }
+    .pending-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex; align-items: center; gap: 12px;
+      font-size: 12px;
+    }
+    .pending-icon { font-size: 16px; flex-shrink: 0; }
+    .pending-body { flex: 1; }
+    .pending-title { color: var(--text); font-weight: 500; }
+    .pending-desc  { color: var(--text2); font-size: 11px; margin-top: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header class="header">
+  <div class="header-left">
+    <div class="badge-row">
+      <span class="badge badge-purple">Session Report</span>
+      <span class="badge badge-green">All Systems Nominal</span>
+      <span class="badge badge-blue">omv-ha · k3s · AWS</span>
+    </div>
+    <h1>Cluster &amp; Infrastructure <span>Improvement Report</span></h1>
+    <div class="subtitle">Cluster GC · OOMKill Fix · Credential Rotation · ECR Lifecycle · Documentation Sync</div>
+  </div>
+  <div class="header-right">
+    <div class="status-pill"><div class="dot"></div> Cluster Healthy</div>
+    <div class="meta">2026-05-16 · omv + omv-ha</div>
+    <div class="meta">2-node k3s HA · VIP 192.168.1.200</div>
+  </div>
+</header>
+
+<!-- ── MAIN ── -->
+<main class="main">
+
+  <!-- Metrics -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-val green">−1.78GB</div>
+      <div class="metric-label">Disk Freed</div>
+      <div class="metric-sub">Journal + Docker cache</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val orange">−133Mi</div>
+      <div class="metric-label">omv-ha Swap Δ</div>
+      <div class="metric-sub">214Mi → 81Mi</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val purple">4</div>
+      <div class="metric-label">Repos Updated</div>
+      <div class="metric-sub">cloudless-manager · omv-ha · cloudless.gr</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val blue">9</div>
+      <div class="metric-label">KBs Updated</div>
+      <div class="metric-sub">Memory + Notion + etcd runbook</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val yellow">0</div>
+      <div class="metric-label">OOMKills Active</div>
+      <div class="metric-sub">Was: exit 137 on omv-ha</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val green">7</div>
+      <div class="metric-label">New Alert Rules</div>
+      <div class="metric-sub">Node disk + memory PrometheusRules</div>
+    </div>
+  </div>
+
+  <!-- Critical Fixes -->
+  <div>
+    <div class="section-title">Critical Fixes</div>
+    <div class="cards">
+
+      <div class="card red-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon red">💥</div>
+            <div class="card-title">cloudless-manager OOMKill (exit 137)</div>
+          </div>
+          <span class="tag tag-fixed">Fixed</span>
+        </div>
+        <div class="card-desc">
+          Pod on omv-ha (955Mi total) was breaching its 256Mi memory limit under normal load. k3s OOM-killed it repeatedly, causing unavailability.
+        </div>
+        <div class="diff">
+          <div class="diff-del">- replicas: 2  # podAntiAffinity → 1 pod on omv-ha</div>
+          <div class="diff-del">- memory: { requests: 128Mi, limits: 256Mi }</div>
+          <div class="diff-del">- strategy: RollingUpdate (maxSurge:1)</div>
+          <div class="diff-add">+ replicas: 1</div>
+          <div class="diff-add">+ nodeSelector: kubernetes.io/hostname: omv</div>
+          <div class="diff-add">+ memory: { requests: 96Mi, limits: 192Mi }</div>
+          <div class="diff-add">+ strategy: Recreate</div>
+        </div>
+        <div class="kv">
+          <div class="kv-row">
+            <div class="kv-key">Themis128/cloudless-manager</div>
+            <span class="commit">5962a86</span>
+          </div>
+          <div class="kv-row">
+            <div class="kv-key">Themis128/omv-ha override</div>
+            <span class="commit">1804b61</span> <span style="font-size:11px;color:var(--text3);margin-left:4px">merged 9d6354b</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card red-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon red">🔑</div>
+            <div class="card-title">Stale AWS IAM Key (omv-main-cli)</div>
+          </div>
+          <span class="tag tag-security">Security</span>
+        </div>
+        <div class="card-desc">
+          omv-main's <code style="font-size:11px;background:var(--surface2);padding:1px 4px;border-radius:3px">~/.aws/credentials</code> had a stale/dead key, breaking etcd S3 snapshots and ML model checks.
+        </div>
+        <div class="kv">
+          <div class="kv-row">
+            <div class="kv-key">Old key</div>
+            <div class="kv-val strike">AKIAUBXIAELUYMUPWXLG</div>
+          </div>
+          <div class="kv-row">
+            <div class="kv-key">Active key</div>
+            <div class="kv-val new">AKIAUBXIAELU5SADA3XL</div>
+          </div>
+          <div class="kv-row">
+            <div class="kv-key">Source</div>
+            <div class="kv-val" style="color:var(--text2)">k8s secret <code style="font-size:10px;background:var(--surface2);padding:1px 4px;border-radius:3px">duckdb-api-secrets</code></div>
+          </div>
+        </div>
+        <div class="changes">
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>ml_check_models</strong> working again</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>etcd S3 snapshots</strong> auth restored</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Cluster GC -->
+  <div>
+    <div class="section-title">Cluster Garbage Collection</div>
+    <div class="cards three">
+
+      <div class="card orange-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon orange">🧹</div>
+            <div class="card-title">Journald Vacuum</div>
+          </div>
+          <span class="tag tag-cleanup">Cleanup</span>
+        </div>
+        <div class="card-desc">Both nodes vacuumed to 200MB cap via nsenter.</div>
+        <div class="kv">
+          <div class="kv-row"><div class="kv-key">omv freed</div><div class="kv-val new">−430MB</div></div>
+          <div class="kv-row"><div class="kv-key">schedule</div><div class="kv-val" style="color:var(--text2)">Sun 03:00 CronJob</div></div>
+        </div>
+      </div>
+
+      <div class="card orange-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon orange">🐳</div>
+            <div class="card-title">Docker Build Cache</div>
+          </div>
+          <span class="tag tag-cleanup">Cleanup</span>
+        </div>
+        <div class="card-desc">Docker builder prune on omv-main freed stale layer cache.</div>
+        <div class="kv">
+          <div class="kv-row"><div class="kv-key">freed</div><div class="kv-val new">−1.351GB</div></div>
+          <div class="kv-row"><div class="kv-key">disk after</div><div class="kv-val" style="color:var(--text2)">67% → 66%</div></div>
+        </div>
+      </div>
+
+      <div class="card orange-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon orange">♻️</div>
+            <div class="card-title">Stale ReplicaSet GC</div>
+          </div>
+          <span class="tag tag-cleanup">Cleanup</span>
+        </div>
+        <div class="card-desc">Stale 0/0/0 RSes cleared. CronJob image upgraded.</div>
+        <div class="kv">
+          <div class="kv-row"><div class="kv-key">image</div><div class="kv-val new">alpine/k8s:1.33.0</div></div>
+          <div class="kv-row"><div class="kv-key">deadline</div><div class="kv-val" style="color:var(--text2)">120s → 300s</div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- AWS & ECR -->
+  <div>
+    <div class="section-title">AWS Cleanup</div>
+    <div class="cards">
+
+      <div class="card blue-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon blue">📦</div>
+            <div class="card-title">ECR Lifecycle Policy — cloudless-pi-app</div>
+          </div>
+          <span class="tag tag-cleanup">Cleanup</span>
+        </div>
+        <div class="card-desc">
+          No lifecycle policy existed on the Pi app ECR repo. Old tagged images were accumulating with no cleanup. <code style="font-size:11px;background:var(--surface2);padding:1px 4px;border-radius:3px">omv-main-cli</code> had no ECR permissions, so a GH Actions workflow was created using the existing OIDC role.
+        </div>
+        <div class="changes">
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text">Policy set: <strong>keep last 5 images</strong>, any tag status</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text">Workflow: <strong>ecr-lifecycle.yml</strong> in Themis128/cloudless.gr</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text">AWS applies policy automatically within 24h</span></div>
+        </div>
+      </div>
+
+      <div class="card accent-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon purple">🏠</div>
+            <div class="card-title">omv-ha Pod Placement Audit</div>
+          </div>
+          <span class="tag tag-perf">Performance</span>
+        </div>
+        <div class="card-desc">Full audit of which pods run on the constrained 955Mi node. Two heavy monitoring pods were pinned to omv.</div>
+        <div class="changes">
+          <div class="change-row"><span class="change-icon">→</span><span class="change-text"><strong>kube-state-metrics</strong> — nodeSelector: omv</span></div>
+          <div class="change-row"><span class="change-icon">→</span><span class="change-text"><strong>cloudflare-geo-exporter</strong> — nodeSelector: omv</span></div>
+          <div class="change-row"><span class="change-icon">→</span><span class="change-text"><strong>cloudless-manager</strong> — nodeSelector: omv (OOMKill fix)</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text">omv-ha swap: <strong>214Mi → 81Mi</strong></span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Repo & Git -->
+  <div>
+    <div class="section-title">Repository & Git Hygiene</div>
+    <div class="cards three">
+
+      <div class="card green-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon green">🔀</div>
+            <div class="card-title">Merge Conflict Resolution</div>
+          </div>
+          <span class="tag tag-fixed">Fixed</span>
+        </div>
+        <div class="card-desc">omv-ha repo was 5 commits behind with 3 conflicts after rebase.</div>
+        <div class="changes">
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>duckdb-api.yaml</strong> — kept comment (no creds)</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>omv-main-k3s-config</strong> — took remote (creds stripped)</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>cronjobs.yaml</strong> — kept 1.33.0 + 300s</span></div>
+        </div>
+      </div>
+
+      <div class="card green-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon green">🔒</div>
+            <div class="card-title">Secret Hygiene</div>
+          </div>
+          <span class="tag tag-security">Security</span>
+        </div>
+        <div class="card-desc">AWS etcd-S3 credentials found committed in omv-main-k3s-config. Remote correctly had them commented out — local version discarded.</div>
+        <div class="changes">
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text">AWS keys removed from k3s config YAML</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text">duckdb-api Secret not committed to source</span></div>
+        </div>
+      </div>
+
+      <div class="card green-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon green">📋</div>
+            <div class="card-title">Both Repos in Sync</div>
+          </div>
+          <span class="tag tag-fixed">Fixed</span>
+        </div>
+        <div class="card-desc">cloudless-manager config now consistent across both source repos — CI can't revert the OOMKill fix.</div>
+        <div class="kv">
+          <div class="kv-row"><div class="kv-key">cloudless-manager</div><span class="commit">5962a86</span></div>
+          <div class="kv-row"><div class="kv-key">omv-ha override</div><span class="commit">1804b61</span></div>
+          <div class="kv-row"><div class="kv-key">merge commit</div><span class="commit">9d6354b</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Documentation -->
+  <div>
+    <div class="section-title">Documentation Updated</div>
+    <div class="cards">
+
+      <div class="card accent-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon purple">📝</div>
+            <div class="card-title">Memory Files (Claude KBs)</div>
+          </div>
+          <span class="tag tag-docs">Docs</span>
+        </div>
+        <div class="changes">
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>project_cloudless_manager.md</strong> — HA→1 replica, Recreate, 192Mi, GHCR</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>project_omv_ha_memory.md</strong> — pod placement, swap reduction, commits</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>project_aws_lambda.md</strong> — key rotation, ECR lifecycle policy</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>project_maintenance.md</strong> — alpine/k8s:1.33.0, 300s deadline</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>MEMORY.md</strong> index — Cloudless Manager entry updated</span></div>
+        </div>
+      </div>
+
+      <div class="card accent-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon purple">☁️</div>
+            <div class="card-title">Notion Pages</div>
+          </div>
+          <span class="tag tag-docs">Docs</span>
+        </div>
+        <div class="changes">
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>🖥️ Cloudless Manager</strong> — GHCR image, CI deploy, 192Mi, Recreate strategy</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>🏛️ HA Architecture</strong> — Lambda 1024→512MB, key rotation, ECR lifecycle</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text">Last-verified timestamp bumped to <strong>2026-05-16</strong></span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Session 2 additions -->
+  <div>
+    <div class="section-title">Session 2 — Additional Fixes</div>
+    <div class="cards three">
+
+      <div class="card green-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon green">📊</div>
+            <div class="card-title">Node Disk &amp; Memory Alerts</div>
+          </div>
+          <span class="tag tag-fixed">Fixed</span>
+        </div>
+        <div class="card-desc">No node-level disk or memory PrometheusRules existed — only pod/PVC alerts. Seven new rules now active in the <code style="font-size:11px;background:var(--surface2);padding:1px 4px;border-radius:3px">monitoring</code> namespace.</div>
+        <div class="changes">
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>NodeDiskUsageHigh</strong> — &gt;80% root fs, warning</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>NodeDiskUsageCritical</strong> — &gt;90%, critical</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>NodeDiskUsageOmvMain</strong> — &gt;75% on omv-main (etcd node), warning</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>EtcdDiskSpaceLow</strong> — &gt;85% on omv-main, critical</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>NodeMemoryPressure</strong> — &lt;200Mi available, warning</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>NodeMemoryPressureCritical</strong> — &lt;100Mi, critical</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text"><strong>NodeHighSwapUsage</strong> — &gt;500Mi swap, warning</span></div>
+        </div>
+        <div class="kv" style="margin-top:10px">
+          <div class="kv-row"><div class="kv-key">file</div><div class="kv-val" style="color:var(--text2)">k8s/monitoring/cluster-prometheusrules.yaml</div></div>
+          <div class="kv-row"><div class="kv-key">commit</div><span class="commit">d3f1b76</span></div>
+        </div>
+      </div>
+
+      <div class="card green-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon green">📖</div>
+            <div class="card-title">etcd Restore Runbook</div>
+          </div>
+          <span class="tag tag-docs">Docs</span>
+        </div>
+        <div class="card-desc">Full 8-step restore runbook created in Notion under "HA Standby &amp; Failover Architecture". Covers snapshot listing, k3s stop on both nodes, <code style="font-size:11px;background:var(--surface2);padding:1px 4px;border-radius:3px">--cluster-reset</code> on omv-main, omv-ha rejoin, etcd quorum verification.</div>
+        <div class="changes">
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text">8-step restore procedure with exact commands</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text">Known pitfalls section (etcd read-only at 95% disk)</span></div>
+          <div class="change-row"><span class="change-icon">✅</span><span class="change-text">Snapshot schedule reference table</span></div>
+        </div>
+        <div class="kv" style="margin-top:10px">
+          <div class="kv-row"><div class="kv-key">Notion page</div><div class="kv-val" style="color:var(--text2)">3627d82c-410a-815c-9b87-f657121f8d32</div></div>
+        </div>
+      </div>
+
+      <div class="card orange-border">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="card-icon orange">🔑</div>
+            <div class="card-title">cloudless-ops Key Dead</div>
+          </div>
+          <span class="tag tag-security">Security</span>
+        </div>
+        <div class="card-desc">Discovered during SST deploy attempt: <code style="font-size:11px;background:var(--surface2);padding:1px 4px;border-radius:3px">cloudless-ops</code> access key <code style="font-size:11px;background:var(--surface2);padding:1px 4px;border-radius:3px">AKIAUBXIAELUVNGTQMEG</code> returns <code style="font-size:11px;background:var(--surface2);padding:1px 4px;border-radius:3px">InvalidClientTokenId</code> — fully deleted from AWS, not just expired.</div>
+        <div class="changes">
+          <div class="change-row"><span class="change-icon">⚠️</span><span class="change-text">SST deploys currently broken — no valid Windows credentials</span></div>
+          <div class="change-row"><span class="change-icon">→</span><span class="change-text">Go to AWS Console → IAM → cloudless-ops → Create access key</span></div>
+          <div class="change-row"><span class="change-icon">→</span><span class="change-text">Update <code style="font-size:11px;background:var(--surface2);padding:1px 4px;border-radius:3px">C:\Users\baltz\.aws\credentials</code> [cloudless-ops] section</span></div>
+          <div class="change-row"><span class="change-icon">→</span><span class="change-text">Run <code style="font-size:11px;background:var(--surface2);padding:1px 4px;border-radius:3px">npx sst deploy --stage production</code> from D:\cloudless.gr</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Pending / Recommendations -->
+  <div>
+    <div class="section-title">Remaining Actions</div>
+    <div class="pending-list">
+
+      <div class="pending-item">
+        <div class="pending-icon">🔑</div>
+        <div class="pending-body">
+          <div class="pending-title">Rotate <code class="change-code">cloudless-ops</code> key — then run SST deploy for 512MB Lambda</div>
+          <div class="pending-desc">AWS Console → IAM → cloudless-ops → Create access key → update C:\Users\baltz\.aws\credentials → run <code class="change-code">AWS_PROFILE=cloudless-ops npx sst deploy --stage production</code> from D:\cloudless.gr. The code change (memory: "512 MB") is already in sst.config.ts:138.</div>
+        </div>
+        <span class="tag tag-security">Blocker</span>
+      </div>
+
+      <div class="pending-item">
+        <div class="pending-icon">🔐</div>
+        <div class="pending-body">
+          <div class="pending-title">IAM Identity Center (SSO) migration — 2026-05-23</div>
+          <div class="pending-desc">Scheduled task creation was blocked (tool requires interactive UI approval). Set a calendar reminder for May 23: migrate omv-main-cli, cloudless-ops, grafana-cloudwatch-reader, cloudless-pi-standby to short-lived SSO credentials. Runbook in Notion HA page.</div>
+        </div>
+        <span class="tag tag-security">Security</span>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<!-- ── FOOTER ── -->
+<footer class="footer">
+  <div>Cloudless Infrastructure · omv (Pi5 8GB) + omv-ha (Pi4 1GB) · k3s v1.35.4+k3s1</div>
+  <div>Generated 2026-05-16 · Updated session 2 — disk alerts, etcd runbook, credential audit</div>
+</footer>
+
+</body>
+</html>
