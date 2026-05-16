@@ -1,0 +1,104 @@
+###############################################################################
+# cloudless-manager — Web management UI
+# Source of truth: Themis128/cloudless-manager repo (CI applies its own manifest)
+#
+# OVERRIDE: this file pins cloudless-manager to omv (Pi5 8GB) because omv-ha
+# (Pi4 1GB) only has ~455Mi Kubernetes-allocatable RAM, and cloudless-manager's
+# 128Mi request pushes it into OOM territory (confirmed exit 137, 2026-05-16).
+#
+# Re-apply this after every cloudless-manager CI deploy:
+#   kubectl apply -f k8s/cloudless/cloudless-manager.yaml
+#
+# TODO: upstream these changes into Themis128/cloudless-manager k8s manifest
+#   so the CI deploy no longer reverts replicas/affinity/nodeSelector.
+###############################################################################
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudless-manager
+  namespace: cloudless
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudless-manager
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: cloudless-manager
+    spec:
+      # Pin to omv (Pi5 8GB) — omv-ha (Pi4 1GB) has insufficient RAM.
+      # Hard podAntiAffinity removed; single replica makes it redundant.
+      nodeSelector:
+        kubernetes.io/hostname: omv
+      imagePullSecrets:
+        - name: regcred-ghcr
+      containers:
+        - name: cloudless-manager
+          image: ghcr.io/themis128/cloudless-manager:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: CF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudless-manager-secrets
+                  key: CF_TOKEN
+            - name: CF_ZONE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloudless-manager-secrets
+                  key: CF_ZONE_ID
+            - name: CF_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloudless-manager-secrets
+                  key: CF_ACCOUNT_ID
+            - name: CF_TUNNEL_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloudless-manager-secrets
+                  key: CF_TUNNEL_ID
+            - name: AWS_REGION
+              value: us-east-1
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloudless-manager-secrets
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cloudless-manager-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
