@@ -63,6 +63,8 @@ export const CHARACTER_LIMIT = 20000;
 // ---------------------------------------------------------------------------
 export const CLOUDFLARE_API_TOKEN =
   process.env.CLOUDFLARE_API_TOKEN ?? "";
+export const CLOUDFLARE_ACCOUNT_ID =
+  process.env.CLOUDFLARE_ACCOUNT_ID ?? "fb7dc7b69b662480cd5961a4d1913c78";
 export const CLOUDFLARE_ZONE_ID =
   process.env.CLOUDFLARE_ZONE_ID ?? "aa875388a91714c369b1e20107e643f5";
 export const CLOUDFLARE_TUNNEL_ID =

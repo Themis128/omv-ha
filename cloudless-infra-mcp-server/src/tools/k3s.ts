@@ -207,6 +207,54 @@ Returns: pod status, service, ingress, health check via Traefik VIP, and current
     },
   );
 
+  // ── k3s_prepull_image ────────────────────────────────────────────────────
+  server.registerTool(
+    "k3s_prepull_image",
+    {
+      title: "K3s Pre-pull Container Image",
+      description: `Pre-pull a container image into the k3s containerd store (k8s.io namespace) on omv-main
+before a rollout, so pod startup is near-instant instead of waiting 4+ minutes for ECR pull.
+
+Uses: sudo ctr -n k8s.io images pull (the only tool that correctly targets the k8s.io namespace
+and honours ECR credentials). Requires AWS creds on the node (uses the pi-standby-aws-creds secret
+or instance profile). Typically takes 2-4 minutes for a full pull; subsequent pulls of the same
+SHA are instant (image already cached).
+
+Use before triggering a kubectl rollout to eliminate pull-time from the rollout window.`,
+      inputSchema: z.object({
+        image: z
+          .string()
+          .describe(
+            "Full image URI including tag, e.g. 278585680617.dkr.ecr.us-east-1.amazonaws.com/cloudless-pi-app:abc123",
+          ),
+        aws_region: z
+          .string()
+          .default("us-east-1")
+          .describe("AWS region for ECR login token"),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ image, aws_region }) => {
+      // Get ECR login token from the node itself (it has pi-standby-aws-creds)
+      const cmd = [
+        `ECR_TOKEN=$(aws ecr get-login-password --region ${aws_region} 2>&1)`,
+        `if [ $? -ne 0 ]; then echo "❌ ECR token failed: $ECR_TOKEN"; exit 1; fi`,
+        `echo "Pulling ${image}..."`,
+        `sudo ctr -n k8s.io images pull -u "AWS:$ECR_TOKEN" "${image}" 2>&1`,
+        `if [ $? -eq 0 ]; then`,
+        `  echo "✅ Pre-pull complete: ${image}"`,
+        `  sudo ctr -n k8s.io images ls | grep "${image.split(":").pop()}" || true`,
+        `else`,
+        `  echo "❌ Pre-pull failed"; exit 1`,
+        `fi`,
+      ].join("\n");
+
+      const r = await runOnNode(K3S_NODE, cmd);
+      const text = r.error ? `❌ SSH error: ${r.error}` : "```\n" + r.stdout + "\n```";
+      return { content: [{ type: "text", text }] };
+    },
+  );
+
   // ── k3s_describe_resource ─────────────────────────────────────────────────
   server.registerTool(
     "k3s_describe_resource",
