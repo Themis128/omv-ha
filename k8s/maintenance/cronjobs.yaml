@@ -31,14 +31,14 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      activeDeadlineSeconds: 120
+      activeDeadlineSeconds: 300
       template:
         spec:
           restartPolicy: OnFailure
           serviceAccountName: maintenance-sa
           containers:
             - name: gc
-              image: bitnami/kubectl:1.33
+              image: alpine/k8s:1.30.0
               command:
                 - sh
                 - -c
