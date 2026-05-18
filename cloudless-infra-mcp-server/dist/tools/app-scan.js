@@ -173,9 +173,10 @@ This is the entry point for a full app audit — use it first, then drill into s
             // TTFB
             runOnNode("omv-main", `curl -so /dev/null --max-time 10 -w '%{time_starttransfer}' '${APPS.cloudless}'`),
             runOnNode("omv-main", `curl -so /dev/null --max-time 10 -w '%{time_starttransfer}' '${APPS.manager}'`),
-            // Compression check
-            runOnNode("omv-main", `curl -sI --max-time 10 --compressed '${APPS.cloudless}' | grep -i 'content-encoding'`),
-            runOnNode("omv-main", `curl -sI --max-time 10 --compressed '${APPS.manager}' | grep -i 'content-encoding'`),
+            // Compression check — GET (not HEAD): a HEAD response has no body, so
+            // content-encoding is often absent and would read as a false negative.
+            runOnNode("omv-main", `curl -s -o /dev/null -D - --max-time 10 --compressed '${APPS.cloudless}' | grep -i 'content-encoding'`),
+            runOnNode("omv-main", `curl -s -o /dev/null -D - --max-time 10 --compressed '${APPS.manager}' | grep -i 'content-encoding'`),
         ]);
         const [clH, mgH, clTTFB, mgTTFB, clEnc, mgEnc] = checks;
         const report = ["# App Improvement Report\n"];
@@ -198,24 +199,13 @@ This is the entry point for a full app audit — use it first, then drill into s
             report.push(`**TTFB:** ${ttfbVal > 0 ? `${(ttfbVal * 1000).toFixed(0)}ms${ttfbVal > 1 ? " ⚠️ slow" : " ✅"}` : "n/a"}`);
             report.push("");
         }
-        report.push("## Known Code-Level Issues");
-        report.push(`
-**cloudless.gr (Next.js):**
-- CSP set to \`Report-Only\` — not enforced; promote after soak period
-- JWT signature not verified in \`readCognitoToken()\` (src/proxy.ts) — use \`jose.jwtVerify()\`
-- \`<html lang>\` hardcoded to \`"en"\` for all 4 locales (src/app/layout.tsx)
-- \`geistMono\` font has \`preload: false\` despite above-the-fold usage (next.config.ts)
-- \`three\`, \`@react-three/drei\`, \`lucide-react\` missing from \`optimizePackageImports\`
-- In-memory rate limiter resets on Lambda cold start (src/proxy.ts) — use WAF rule for /api/chat
-
-**cloudless-manager (Node.js):**
-- CSRF guard accepts any \`localhost\` origin (server.js ~line 58)
-- WebSocket /ws/logs has no auth check (server.js ~line 355) — validate X-Auth-Request-User
-- Rate-limit Map never pruned → memory leak (server.js ~line 27)
-- All catch blocks return \`e.message\` raw → info leak (server.js, all routes)
-- ClusterRole too broad — should be namespace-scoped RoleBindings (k8s/rbac.yaml)
-- \`:latest\` image tag in deployment — no SHA pinning (k8s/deployment.yaml)
-      `.trim());
+        report.push("## Scope");
+        report.push("This report covers **live HTTP-level checks only** — security headers, " +
+            "TTFB and compression as actually served right now. It deliberately does " +
+            "**not** carry a static code-issue list: a hardcoded list silently drifts " +
+            "stale and produces false findings (e.g. flagging an auth bug that was " +
+            "fixed weeks ago). For code-level review, audit the repos directly — " +
+            "`Themis128/cloudless.gr` and `Themis128/cloudless-manager`.");
         return { content: [{ type: "text", text: report.join("\n") }] };
     });
 }
