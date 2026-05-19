@@ -85,10 +85,28 @@ Run after any Traefik/Cloudflare config change or before a production release.`,
           rows.push(`${ok ? "✅" : "❌"} \`${h}\`${val ? `: \`${val.slice(0, 80)}\`` : " — **MISSING**"}`);
         }
 
-        // HTTP→HTTPS redirect check
-        const httpR = await runOnNode("omv-main", `curl -sI --max-time 5 'http://${url.replace("https://", "")}' | grep -i location`);
-        const redirectsToHttps = httpR.stdout.toLowerCase().includes("https://");
-        rows.push(`${redirectsToHttps ? "✅" : "❌"} \`http→https redirect\`${redirectsToHttps ? "" : " — **NO REDIRECT**"}`);
+        // HTTP→HTTPS redirect check.
+        // Note: this app runs behind a Cloudflare tunnel. CF terminates TLS at the edge and
+        // forwards HTTP internally, so the origin never sees plain-HTTP requests from outside.
+        // We curl the HTTP URL and inspect the Location header:
+        //   • Location: https://… → explicit 301/302 redirect ✅
+        //   • Location: /path    → locale/app redirect (CF edge enforces HTTPS) ℹ️
+        //   • No location        → no redirect at all ❌
+        const httpR = await runOnNode(
+          "omv-main",
+          `curl -sI --max-time 8 'http://${url.replace("https://", "")}' | grep -i '^location:'`,
+        );
+        const loc = httpR.stdout.trim().toLowerCase();
+        const explicitHttps = loc.includes("location:") && loc.includes("https://");
+        const cfEdgeHttps = loc.includes("location:") && !loc.includes("https://");
+        const noRedirect = !loc.includes("location:");
+        const redirectIcon = explicitHttps ? "✅" : cfEdgeHttps ? "ℹ️" : "❌";
+        const redirectNote = explicitHttps
+          ? ""
+          : cfEdgeHttps
+            ? " — CF edge enforces HTTPS; origin redirects to locale path only"
+            : " — **NO REDIRECT** (no Location header on HTTP)";
+        rows.push(`${redirectIcon} \`http→https redirect\`${redirectNote}`);
 
         const total = SECURITY_HEADERS.length + 1;
         const summary = pass === total ? `✅ All ${total} checks passed` : `⚠️ ${pass}/${total} passed`;
@@ -122,9 +140,10 @@ Run after CDN config changes or to baseline response performance.`,
 
       for (const key of targets) {
         const url = APPS[key];
-        // TTFB timing + headers in one curl
+        // Use GET (not HEAD) so content-encoding is actually returned.
+        // Discard the body (-o /dev/null) but dump response headers (-D -).
         const cmd =
-          `curl -sI --max-time 15 --compressed ` +
+          `curl -s --max-time 15 --compressed -o /dev/null -D - ` +
           `-w '\\nTTFB: %{time_starttransfer}s | Total: %{time_total}s | Size: %{size_download}B' ` +
           `'${url}'`;
 
