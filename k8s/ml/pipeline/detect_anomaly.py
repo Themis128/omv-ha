@@ -59,7 +59,7 @@ def get_recent_windows() -> pd.DataFrame:
         # Fetch last 4 windows (1 hour) for context
         rows = duckdb_query(
             "SELECT * FROM features_requests "
-            "ORDER BY window DESC LIMIT 400"  # up to 400 endpoint×window combos
+            "ORDER BY \"window\" DESC LIMIT 400"  # up to 400 endpoint×window combos
         )
         df = pd.DataFrame(rows)
     else:
