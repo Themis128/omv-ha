@@ -90,24 +90,26 @@ spec:
                   fi
 
                   # ── 3. Check cloudless app internally (bypasses Cloudflare tunnel) ──
-                  # This distinguishes app failures from tunnel failures.
-                  APP_INTERNAL_RESP="$(curl -s --max-time 8 \
+                  # Use HTTP status code — the app may redirect HTTP→HTTPS internally,
+                  # so status 2xx or 3xx both mean the app is alive and serving.
+                  # Only 0 (no connection) or 5xx means the app is actually broken.
+                  APP_INTERNAL_CODE="$(curl -s --max-time 8 -o /dev/null -w '%{http_code}' \
                     http://cloudless.cloudless.svc.cluster.local:3000/api/health \
-                    2>/dev/null || echo '')"
+                    2>/dev/null || echo '000')"
 
-                  if echo "${APP_INTERNAL_RESP}" | grep -qi 'ok'; then
-                    echo "[${TIMESTAMP}] INFO: cloudless internal check OK"
-                    APP_INTERNAL_STATUS="OK"
-                  else
-                    echo "[${TIMESTAMP}] ERROR: cloudless internal check FAILED — response: ${APP_INTERNAL_RESP:-<no response>}"
+                  if [ "${APP_INTERNAL_CODE}" = "000" ] || [ "${APP_INTERNAL_CODE}" -ge 500 ] 2>/dev/null; then
+                    echo "[${TIMESTAMP}] ERROR: cloudless internal check FAILED — HTTP ${APP_INTERNAL_CODE}"
                     APP_INTERNAL_STATUS="FAIL"
+                  else
+                    echo "[${TIMESTAMP}] INFO: cloudless internal check OK — HTTP ${APP_INTERNAL_CODE}"
+                    APP_INTERNAL_STATUS="OK"
                   fi
 
-                  # ── 4. Restart cloudless deployment if internal check fails ──────────
+                  # ── 4. Restart cloudless deployment only if truly unreachable ────────
                   if [ "${APP_INTERNAL_STATUS}" = "FAIL" ]; then
                     CLOUDLESS_READY="$(kubectl get deployment cloudless -n cloudless \
                       -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo '0')"
-                    echo "[${TIMESTAMP}] ERROR: cloudless internal unhealthy (ready=${CLOUDLESS_READY:-0}) — restarting"
+                    echo "[${TIMESTAMP}] ERROR: cloudless internal unreachable (ready=${CLOUDLESS_READY:-0}) — restarting"
                     kubectl rollout restart deployment/cloudless -n cloudless \
                       && echo "[${TIMESTAMP}] INFO: rollout restart issued for cloudless" \
                       || echo "[${TIMESTAMP}] ERROR: failed to restart cloudless"
