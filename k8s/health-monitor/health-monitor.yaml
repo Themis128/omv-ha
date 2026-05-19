@@ -6,10 +6,9 @@ metadata:
   namespace: kube-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: health-monitor
-  namespace: kube-system
 rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
@@ -19,16 +18,15 @@ rules:
     verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: health-monitor
-  namespace: kube-system
 subjects:
   - kind: ServiceAccount
     name: health-monitor
     namespace: kube-system
 roleRef:
-  kind: Role
+  kind: ClusterRole
   name: health-monitor
   apiGroup: rbac.authorization.k8s.io
 ---
@@ -52,7 +50,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: health-monitor
-              image: alpine/k8s:1.30.0
+              image: alpine/k8s:1.33.0
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/sh
@@ -62,20 +60,21 @@ spec:
 
                   TIMESTAMP="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
                   TRAEFIK_STATUS="FAIL"
-                  APP_STATUS="FAIL"
+                  APP_INTERNAL_STATUS="FAIL"
+                  APP_EXTERNAL_STATUS="FAIL"
 
                   # ── 1. Check traefik deployment ready replicas ───────────────────────
                   READY_REPLICAS="$(kubectl get deployment traefik -n kube-system \
                     -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo '0')"
 
                   if [ -z "${READY_REPLICAS}" ] || [ "${READY_REPLICAS}" -lt 1 ]; then
-                    echo "[${TIMESTAMP}] ERROR: traefik deployment has ${READY_REPLICAS:-0} ready replicas — restarting"
+                    echo "[${TIMESTAMP}] ERROR: traefik has ${READY_REPLICAS:-0} ready replicas — restarting"
                     kubectl rollout restart deployment/traefik -n kube-system \
                       && echo "[${TIMESTAMP}] INFO: rollout restart issued for traefik" \
-                      || echo "[${TIMESTAMP}] ERROR: failed to issue rollout restart for traefik"
+                      || echo "[${TIMESTAMP}] ERROR: failed to restart traefik"
                     TRAEFIK_STATUS="FAIL"
                   else
-                    echo "[${TIMESTAMP}] INFO: traefik deployment has ${READY_REPLICAS} ready replica(s)"
+                    echo "[${TIMESTAMP}] INFO: traefik has ${READY_REPLICAS} ready replica(s)"
                     TRAEFIK_STATUS="OK"
                   fi
 
@@ -88,26 +87,51 @@ spec:
                     TRAEFIK_STATUS="FAIL"
                   else
                     echo "[${TIMESTAMP}] INFO: Traefik VIP responded with HTTP ${HTTP_CODE}"
-                    # Only upgrade to OK if deployment check also passed
-                    if [ "${TRAEFIK_STATUS}" = "OK" ]; then
-                      TRAEFIK_STATUS="OK"
-                    fi
                   fi
 
-                  # ── 3. Check https://cloudless.online/api/health ─────────────────────
-                  APP_RESPONSE="$(curl -sk --max-time 10 \
+                  # ── 3. Check cloudless app internally (bypasses Cloudflare tunnel) ──
+                  # This distinguishes app failures from tunnel failures.
+                  APP_INTERNAL_RESP="$(curl -s --max-time 8 \
+                    http://cloudless.cloudless.svc.cluster.local:3000/api/health \
+                    2>/dev/null || echo '')"
+
+                  if echo "${APP_INTERNAL_RESP}" | grep -qi 'ok'; then
+                    echo "[${TIMESTAMP}] INFO: cloudless internal check OK"
+                    APP_INTERNAL_STATUS="OK"
+                  else
+                    echo "[${TIMESTAMP}] ERROR: cloudless internal check FAILED — response: ${APP_INTERNAL_RESP:-<no response>}"
+                    APP_INTERNAL_STATUS="FAIL"
+                  fi
+
+                  # ── 4. Restart cloudless deployment if internal check fails ──────────
+                  if [ "${APP_INTERNAL_STATUS}" = "FAIL" ]; then
+                    CLOUDLESS_READY="$(kubectl get deployment cloudless -n cloudless \
+                      -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo '0')"
+                    echo "[${TIMESTAMP}] ERROR: cloudless internal unhealthy (ready=${CLOUDLESS_READY:-0}) — restarting"
+                    kubectl rollout restart deployment/cloudless -n cloudless \
+                      && echo "[${TIMESTAMP}] INFO: rollout restart issued for cloudless" \
+                      || echo "[${TIMESTAMP}] ERROR: failed to restart cloudless"
+                  fi
+
+                  # ── 5. Check cloudless externally (validates Cloudflare tunnel) ──────
+                  APP_EXTERNAL_RESP="$(curl -sL --max-time 10 \
                     https://cloudless.online/api/health 2>/dev/null || echo '')"
 
-                  if echo "${APP_RESPONSE}" | grep -qi 'ok'; then
-                    echo "[${TIMESTAMP}] INFO: cloudless.online/api/health responded — status ok"
-                    APP_STATUS="OK"
+                  if echo "${APP_EXTERNAL_RESP}" | grep -qi 'ok'; then
+                    echo "[${TIMESTAMP}] INFO: cloudless.online external check OK"
+                    APP_EXTERNAL_STATUS="OK"
                   else
-                    echo "[${TIMESTAMP}] ERROR: cloudless.online/api/health did not return ok — response: ${APP_RESPONSE:-<no response>}"
-                    APP_STATUS="FAIL"
+                    echo "[${TIMESTAMP}] ERROR: cloudless.online external check FAILED — response: ${APP_EXTERNAL_RESP:-<no response>}"
+                    APP_EXTERNAL_STATUS="FAIL"
                   fi
 
-                  # ── 4. Summary ────────────────────────────────────────────────────────
-                  echo "[${TIMESTAMP}] health: traefik=${TRAEFIK_STATUS} app=${APP_STATUS}"
+                  # ── 6. Tunnel-down detection ─────────────────────────────────────────
+                  if [ "${APP_INTERNAL_STATUS}" = "OK" ] && [ "${APP_EXTERNAL_STATUS}" = "FAIL" ]; then
+                    echo "[${TIMESTAMP}] WARNING: app is healthy internally but unreachable externally — likely Cloudflare tunnel issue"
+                  fi
+
+                  # ── 7. Summary ────────────────────────────────────────────────────────
+                  echo "[${TIMESTAMP}] health: traefik=${TRAEFIK_STATUS} app_internal=${APP_INTERNAL_STATUS} app_external=${APP_EXTERNAL_STATUS}"
               resources:
                 requests:
                   cpu: 50m
