@@ -501,4 +501,150 @@ be set here.`,
       }
     },
   );
+
+  // ── gh_runner_restart ────────────────────────────────────────────────────
+  server.registerTool(
+    "gh_runner_restart",
+    {
+      title: "GitHub Runner — Restart service",
+      description: `Restart the GitHub Actions self-hosted runner systemd service on omv-main via SSH.
+Use after applying a systemd override or when the runner appears stuck or offline.
+Service name is derived as: actions.runner.Themis128-{repo}.{runner}.service`,
+      inputSchema: z.object({
+        repo: z.enum(["cloudless.gr", "cloudless-manager", "omv-ha"]).describe("Repo alias."),
+        runner: z.string().default("omv").describe("Runner name (default: omv)."),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ repo, runner }) => {
+      const svc = `actions.runner.Themis128-${repo}.${runner}.service`;
+      try {
+        const out = await runOnNode("omv-main",
+          `sudo systemctl restart ${svc} && echo "ok" && systemctl is-active ${svc}`);
+        return { content: [{ type: "text", text: `✅ **${svc}** restarted.\n\`\`\`\n${out}\n\`\`\`` }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+      }
+    },
+  );
+
+  // ── gh_runner_fix_service ────────────────────────────────────────────────
+  server.registerTool(
+    "gh_runner_fix_service",
+    {
+      title: "GitHub Runner — Apply systemd hardening override",
+      description: `Write an idempotent systemd drop-in override for the runner service on omv-main.
+Sets: Restart=on-failure, RestartSec=10s, StartLimitIntervalSec=0, network-online.target
+dependency, RUNNER_RETRY_RENEW_SECONDS=300, DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER=1.
+Also writes /etc/systemd/resolved.conf.d/retry.conf with Google + Cloudflare + Quad9 DNS.
+Runs daemon-reload and restarts the service. Idempotent — safe to run repeatedly.`,
+      inputSchema: z.object({
+        repo: z.enum(["cloudless.gr", "cloudless-manager", "omv-ha"]).describe("Repo alias."),
+        runner: z.string().default("omv").describe("Runner name (default: omv)."),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ repo, runner }) => {
+      const svc = `actions.runner.Themis128-${repo}.${runner}.service`;
+      const d = `/etc/systemd/system/${svc}.d`;
+      const writeOverride = [
+        `sudo mkdir -p ${d}`,
+        `{ echo "[Unit]"; echo "Wants=network-online.target"; echo "After=network-online.target"; echo ""; echo "[Service]"; echo "Restart=on-failure"; echo "RestartSec=10s"; echo "StartLimitIntervalSec=0"; echo 'Environment="DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER=1"'; echo 'Environment="RUNNER_RETRY_RENEW_SECONDS=300"'; } | sudo tee ${d}/override.conf`,
+        `sudo mkdir -p /etc/systemd/resolved.conf.d`,
+        `{ echo "[Resolve]"; echo "DNS=8.8.8.8 8.8.4.4 1.1.1.1"; echo "FallbackDNS=9.9.9.9"; echo "DNSStubListener=yes"; echo "Cache=yes"; } | sudo tee /etc/systemd/resolved.conf.d/retry.conf`,
+        `sudo systemctl daemon-reload`,
+        `sudo systemctl restart ${svc}`,
+        `systemctl is-active ${svc}`,
+      ].join(" && ");
+      try {
+        const out = await runOnNode("omv-main", writeOverride);
+        return { content: [{ type: "text", text: `✅ Systemd override applied and service restarted.\n\`\`\`\n${out}\n\`\`\`` }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+      }
+    },
+  );
+
+  // ── gh_runner_logs ───────────────────────────────────────────────────────
+  server.registerTool(
+    "gh_runner_logs",
+    {
+      title: "GitHub Runner — Fetch service logs",
+      description: `Fetch recent journalctl logs from the GitHub Actions runner service on omv-main.
+Useful for diagnosing connection drops, DNS failures, job hangs, or stuck runs.`,
+      inputSchema: z.object({
+        repo: z.enum(["cloudless.gr", "cloudless-manager", "omv-ha"]).describe("Repo alias."),
+        runner: z.string().default("omv").describe("Runner name (default: omv)."),
+        lines: z.number().int().min(10).max(500).default(50).describe("Number of log lines to return."),
+        since: z.string().optional().describe("journalctl --since value, e.g. '10 minutes ago' or '2025-05-23 01:00'."),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+    async ({ repo, runner, lines, since }) => {
+      const svc = `actions.runner.Themis128-${repo}.${runner}.service`;
+      const sf = since ? `--since "${since}"` : "";
+      try {
+        const out = await runOnNode("omv-main",
+          `journalctl -u ${svc} ${sf} -n ${lines} --no-pager --output=short-iso 2>&1`);
+        return { content: [{ type: "text", text: `## Runner logs: ${svc}\n\`\`\`\n${out}\n\`\`\`` }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+      }
+    },
+  );
+
+  // ── gh_runner_cancel_stuck ───────────────────────────────────────────────
+  server.registerTool(
+    "gh_runner_cancel_stuck",
+    {
+      title: "GitHub Runner — Cancel stuck workflow runs",
+      description: `Cancel all queued or in-progress workflow runs for a repo.
+Use when the self-hosted runner crashed mid-job and GitHub still shows runs as queued/in-progress.
+Fetches both queued and in-progress runs, optionally filters by workflow name, and cancels each.
+Set dry_run=true to preview without cancelling.`,
+      inputSchema: z.object({
+        repo: z.enum(["cloudless.gr", "cloudless-manager", "omv-ha"]).describe("Repo alias."),
+        workflow: z.string().optional().describe("Filter by workflow name (partial match). Omit to cancel ALL stuck runs."),
+        dry_run: z.boolean().default(false).describe("If true, list what would be cancelled without cancelling."),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    },
+    async ({ repo, workflow, dry_run }) => {
+      const fullRepo = resolveRepo(repo);
+      type Run = { id: number; name: string; status: string; html_url: string };
+      type RunList = { workflow_runs: Run[] };
+      try {
+        const [q, ip] = await Promise.all([
+          ghJson<RunList>(["api", `repos/${fullRepo}/actions/runs?status=queued&per_page=50`]),
+          ghJson<RunList>(["api", `repos/${fullRepo}/actions/runs?status=in_progress&per_page=50`]),
+        ]);
+        let candidates = [...q.workflow_runs, ...ip.workflow_runs];
+        if (workflow) {
+          candidates = candidates.filter((r) => r.name.toLowerCase().includes(workflow.toLowerCase()));
+        }
+        if (candidates.length === 0) {
+          return { content: [{ type: "text",
+            text: `✅ No stuck runs on **${fullRepo}**${workflow ? ` matching "${workflow}"` : ""}.` }] };
+        }
+        const rows = candidates.map((r) => `  - [${r.name} #${r.id}](${r.html_url}) (${r.status})`);
+        if (dry_run) {
+          return { content: [{ type: "text",
+            text: `**Dry run** — would cancel ${candidates.length} run(s) on ${fullRepo}:\n${rows.join("\n")}` }] };
+        }
+        const results: string[] = [];
+        for (const run of candidates) {
+          try {
+            await ghRaw(["api", "-X", "POST", `repos/${fullRepo}/actions/runs/${run.id}/cancel`]);
+            results.push(`  ✅ Cancelled [${run.name} #${run.id}](${run.html_url})`);
+          } catch {
+            results.push(`  ⚠️  Failed to cancel ${run.name} #${run.id}`);
+          }
+        }
+        return { content: [{ type: "text",
+          text: `## Cancelled ${results.length} run(s) on ${fullRepo}\n\n${results.join("\n")}` }] };
+      } catch (err) {
+        return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+      }
+    },
+  );
 }
