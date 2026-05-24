@@ -41,13 +41,21 @@ export const SECONDARY_HEALTH_CHECK_ID =
 // CloudFront distributions
 export const CLOUDFRONT_APEX = "d3k7muo3c6lw6s.cloudfront.net";
 export const CLOUDFRONT_WWW = "dgrxxatzrgxfi.cloudfront.net";
+export const CLOUDFRONT_DISTRIBUTION_ID = "ELGQBR8109MTM";
+export const CLOUDFRONT_ORIGIN_GROUP_ID = "primary-with-ha";
 
-// API Gateway (Pi failover secondary path)
-export const APIGW_ID = "dwtp9xt4dd";
+// HA failover — Tailscale Funnel (CloudFront secondary origin)
+export const TAILSCALE_FUNNEL_HOST = "omv.tail8eb71.ts.net";
+export const K3S_TRAEFIK_VIP = "192.168.1.200";
+
+// API Gateway (Pi failover secondary path) — RETIRED 2026-05-23
+// Both APIGW custom domains were deleted; Route 53 SECONDARY records removed.
+// HA failover is now handled by CloudFront origin groups.
+export const APIGW_ID = "dwtp9xt4dd"; // kept for reference only
 export const APIGW_APEX_DOMAIN =
-  "d-uy6dmk95il.execute-api.us-east-1.amazonaws.com";
+  "d-uy6dmk95il.execute-api.us-east-1.amazonaws.com"; // NXDomain — deleted
 export const APIGW_WWW_DOMAIN =
-  "d-2msx2z5q7d.execute-api.us-east-1.amazonaws.com";
+  "d-2msx2z5q7d.execute-api.us-east-1.amazonaws.com"; // NXDomain — deleted
 
 // Lambda function name prefix (SST names it <stack>-<stage>-...)
 export const LAMBDA_LOG_GROUP_PREFIX = "/aws/lambda/cloudless-";
