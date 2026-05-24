@@ -4,6 +4,10 @@ description: Check etcd health, latency, and slow-disk warnings on the cluster
 
 Diagnose etcd performance on the k3s cluster.
 
+> **Architecture (2026-05-24)**: etcd runs on **omv-main only** (single-member cluster). omv-ha was demoted to agent-only — it no longer participates in etcd. No quorum concerns; single member is always leader.
+>
+> **Non-default data-dir**: `/srv/dev-disk-by-uuid-a9a5a108-8095-4b7b-8011-716889995cd7/k3s/` (NVMe-backed external disk on omv-main).
+
 Use `mcp__cloudless-infra__cluster_run_command` on omv-main for each step:
 
 1. **Recent slow-disk warnings** (last 5 minutes of k3s logs):
@@ -28,8 +32,9 @@ Use `mcp__cloudless-infra__cluster_run_command` on omv-main for each step:
 
 3. **etcd DB size**:
    ```bash
-   ls -lh /var/lib/rancher/k3s/server/db/etcd/member/snap/db 2>/dev/null || \
-   du -sh /var/lib/rancher/k3s/server/db/etcd/ 2>&1 | head -5
+   DATA_DIR=/srv/dev-disk-by-uuid-a9a5a108-8095-4b7b-8011-716889995cd7/k3s
+   ls -lh ${DATA_DIR}/server/db/etcd/member/snap/db 2>/dev/null || \
+   du -sh ${DATA_DIR}/server/db/etcd/ 2>&1 | head -5
    ```
 
 4. **Current etcd args** (verify tuning is applied):

@@ -23,7 +23,9 @@ Note: Metabase takes ~4.5 minutes to become ready after startup (initialDelaySec
         verify_login: z
           .boolean()
           .default(false)
-          .describe("Also attempt a login with the admin credentials to verify auth works"),
+          .describe(
+            "Also attempt a login with the admin credentials to verify auth works",
+          ),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -47,7 +49,10 @@ Note: Metabase takes ~4.5 minutes to become ready after startup (initialDelaySec
       const r = await runOnNode("omv-main", cmd);
       const text = r.error
         ? `❌ SSH failed: ${r.error}`
-        : "```\n" + r.stdout + (r.stderr ? "\nSTDERR:\n" + r.stderr : "") + "\n```";
+        : "```\n" +
+          r.stdout +
+          (r.stderr ? "\nSTDERR:\n" + r.stderr : "") +
+          "\n```";
       return { content: [{ type: "text", text }] };
     },
   );
@@ -70,11 +75,15 @@ Example queries:
   SELECT id, email, is_superuser, is_active FROM core_user;
   SELECT id, name, engine FROM metabase_database;`,
       inputSchema: z.object({
-        sql: z.string().describe("SQL query to execute against the H2 database"),
+        sql: z
+          .string()
+          .describe("SQL query to execute against the H2 database"),
         scale_down_first: z
           .boolean()
           .default(true)
-          .describe("Scale Metabase to 0 before querying (required for write operations, safe for reads too)"),
+          .describe(
+            "Scale Metabase to 0 before querying (required for write operations, safe for reads too)",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
@@ -104,7 +113,8 @@ Example queries:
       // Simpler approach: use exec on a temporary job-style pod via kubectl exec on a running pod
       // Actually, use a Job via apply since kubectl run --overrides is complex with SSH escaping
       // Use a direct SSH approach instead: exec into the PVC via a simple run command
-      const simpleQuery = `${KUBECTL} run metabase-h2-q --rm -i --restart=Never -n ${NS} ` +
+      const simpleQuery =
+        `${KUBECTL} run metabase-h2-q --rm -i --restart=Never -n ${NS} ` +
         `--image=${MB_IMAGE} --image-pull-policy=IfNotPresent ` +
         `--overrides='{"spec":{"nodeSelector":{"kubernetes.io/hostname":"omv"},"volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"metabase-data"}}],"containers":[{"name":"h","image":"${MB_IMAGE}","imagePullPolicy":"IfNotPresent","command":["java","-cp","/app/metabase.jar","org.h2.tools.Shell","-url","${H2_URL}","-user","","-password","","-sql","${escapedSql}"],"volumeMounts":[{"name":"d","mountPath":"/metabase-data"}]}]}}' ` +
         `-- /bin/true 2>&1 || true`;
@@ -121,10 +131,14 @@ Example queries:
           `${KUBECTL} scale ${MB_DEPLOY} -n ${NS} --replicas=1`,
         );
         lines.push(scaleUp.stdout || scaleUp.error || "done");
-        lines.push("Note: Metabase takes ~4.5 minutes to become ready (initialDelaySeconds=240)");
+        lines.push(
+          "Note: Metabase takes ~4.5 minutes to become ready (initialDelaySeconds=240)",
+        );
       }
 
-      return { content: [{ type: "text", text: "```\n" + lines.join("\n") + "\n```" }] };
+      return {
+        content: [{ type: "text", text: "```\n" + lines.join("\n") + "\n```" }],
+      };
     },
   );
 
@@ -165,10 +179,12 @@ Standard password: TH!123789th!`,
       // Validate hash prefix
       if (!bcrypt_hash.startsWith("$2a$")) {
         return {
-          content: [{
-            type: "text",
-            text: "❌ Hash must use $2a$ prefix (not $2b$). jBCrypt in Metabase v0.55 rejects $2b$ hashes. Regenerate with: bcrypt.gensalt(10, prefix=b'2a')",
-          }],
+          content: [
+            {
+              type: "text",
+              text: "❌ Hash must use $2a$ prefix (not $2b$). jBCrypt in Metabase v0.55 rejects $2b$ hashes. Regenerate with: bcrypt.gensalt(10, prefix=b'2a')",
+            },
+          ],
         };
       }
 
@@ -193,38 +209,47 @@ Standard password: TH!123789th!`,
             spec: {
               nodeSelector: { "kubernetes.io/hostname": "omv" },
               restartPolicy: "Never",
-              containers: [{
-                name: "h2-reset",
-                image: MB_IMAGE,
-                imagePullPolicy: "IfNotPresent",
-                command: ["/bin/bash", "-c"],
-                args: [
-                  `set -e\n` +
-                  `HASH='${bcrypt_hash}'\n` +
-                  `SALT='${password_salt}'\n` +
-                  `EMAIL='${email}'\n` +
-                  `SQL="UPDATE core_user SET email='\${EMAIL}', password='\${HASH}', password_salt='\${SALT}', is_active=true WHERE id=1;"\n` +
-                  `echo '=== BEFORE ==='\n` +
-                  `java -cp /app/metabase.jar org.h2.tools.Shell -url "${H2_URL}" -user "" -password "" -sql "SELECT id, email, password_salt FROM core_user WHERE id=1;"\n` +
-                  `echo '=== UPDATING ==='\n` +
-                  `java -cp /app/metabase.jar org.h2.tools.Shell -url "${H2_URL}" -user "" -password "" -sql "\$SQL"\n` +
-                  `echo '=== AFTER ==='\n` +
-                  `java -cp /app/metabase.jar org.h2.tools.Shell -url "${H2_URL}" -user "" -password "" -sql "SELECT id, email, password_salt FROM core_user WHERE id=1;"\n` +
-                  `echo '=== DONE ==='`,
-                ],
-                volumeMounts: [{ name: "metabase-data", mountPath: "/metabase-data" }],
-              }],
-              volumes: [{
-                name: "metabase-data",
-                persistentVolumeClaim: { claimName: "metabase-data" },
-              }],
+              containers: [
+                {
+                  name: "h2-reset",
+                  image: MB_IMAGE,
+                  imagePullPolicy: "IfNotPresent",
+                  command: ["/bin/bash", "-c"],
+                  args: [
+                    `set -e\n` +
+                      `HASH='${bcrypt_hash}'\n` +
+                      `SALT='${password_salt}'\n` +
+                      `EMAIL='${email}'\n` +
+                      `SQL="UPDATE core_user SET email='\${EMAIL}', password='\${HASH}', password_salt='\${SALT}', is_active=true WHERE id=1;"\n` +
+                      `echo '=== BEFORE ==='\n` +
+                      `java -cp /app/metabase.jar org.h2.tools.Shell -url "${H2_URL}" -user "" -password "" -sql "SELECT id, email, password_salt FROM core_user WHERE id=1;"\n` +
+                      `echo '=== UPDATING ==='\n` +
+                      `java -cp /app/metabase.jar org.h2.tools.Shell -url "${H2_URL}" -user "" -password "" -sql "\$SQL"\n` +
+                      `echo '=== AFTER ==='\n` +
+                      `java -cp /app/metabase.jar org.h2.tools.Shell -url "${H2_URL}" -user "" -password "" -sql "SELECT id, email, password_salt FROM core_user WHERE id=1;"\n` +
+                      `echo '=== DONE ==='`,
+                  ],
+                  volumeMounts: [
+                    { name: "metabase-data", mountPath: "/metabase-data" },
+                  ],
+                },
+              ],
+              volumes: [
+                {
+                  name: "metabase-data",
+                  persistentVolumeClaim: { claimName: "metabase-data" },
+                },
+              ],
             },
           },
         },
       });
 
       // Delete old job if exists, then apply new one
-      await runOnNode("omv-main", `${KUBECTL} delete job ${jobName} -n ${NS} 2>/dev/null || true`);
+      await runOnNode(
+        "omv-main",
+        `${KUBECTL} delete job ${jobName} -n ${NS} 2>/dev/null || true`,
+      );
       const applyCmd = `echo '${jobManifest.replace(/'/g, "'\\''")}' | ${KUBECTL} apply -f -`;
       const applyResult = await runOnNode("omv-main", applyCmd);
       lines.push(applyResult.stdout || applyResult.error || "applied");
@@ -253,10 +278,16 @@ Standard password: TH!123789th!`,
         `${KUBECTL} scale ${MB_DEPLOY} -n ${NS} --replicas=1`,
       );
       lines.push(scaleUp.stdout || scaleUp.error || "done");
-      lines.push("Metabase will be ready in ~4.5 minutes (initialDelaySeconds=240).");
-      lines.push(`To verify login once ready, use metabase_check_health with verify_login=true.`);
+      lines.push(
+        "Metabase will be ready in ~4.5 minutes (initialDelaySeconds=240).",
+      );
+      lines.push(
+        `To verify login once ready, use metabase_check_health with verify_login=true.`,
+      );
 
-      return { content: [{ type: "text", text: "```\n" + lines.join("\n") + "\n```" }] };
+      return {
+        content: [{ type: "text", text: "```\n" + lines.join("\n") + "\n```" }],
+      };
     },
   );
 
@@ -289,13 +320,20 @@ The lock occurs because the previous Metabase pod held the lock; when killed, PI
         `${KUBECTL} rollout restart ${MB_DEPLOY} -n ${NS}`,
       );
       lines.push(r2.stdout || r2.error || "done");
-      lines.push("Metabase will be ready in ~4.5 minutes (initialDelaySeconds=240).");
+      lines.push(
+        "Metabase will be ready in ~4.5 minutes (initialDelaySeconds=240).",
+      );
 
       lines.push("\n=== Current pod state ===");
-      const r3 = await runOnNode("omv-main", `${KUBECTL} get pods -n ${NS} -o wide`);
+      const r3 = await runOnNode(
+        "omv-main",
+        `${KUBECTL} get pods -n ${NS} -o wide`,
+      );
       lines.push(r3.stdout || r3.error || "");
 
-      return { content: [{ type: "text", text: "```\n" + lines.join("\n") + "\n```" }] };
+      return {
+        content: [{ type: "text", text: "```\n" + lines.join("\n") + "\n```" }],
+      };
     },
   );
 

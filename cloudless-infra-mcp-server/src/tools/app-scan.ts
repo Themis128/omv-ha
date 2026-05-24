@@ -63,7 +63,8 @@ Run after any Traefik/Cloudflare config change or before a production release.`,
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
     async ({ app }) => {
-      const targets: AppKey[] = app === "both" ? ["cloudless", "manager"] : [app as AppKey];
+      const targets: AppKey[] =
+        app === "both" ? ["cloudless", "manager"] : [app as AppKey];
       const results: string[] = [];
 
       for (const key of targets) {
@@ -82,7 +83,9 @@ Run after any Traefik/Cloudflare config change or before a production release.`,
           const val = headers[h];
           const ok = !!val;
           if (ok) pass++;
-          rows.push(`${ok ? "✅" : "❌"} \`${h}\`${val ? `: \`${val.slice(0, 80)}\`` : " — **MISSING**"}`);
+          rows.push(
+            `${ok ? "✅" : "❌"} \`${h}\`${val ? `: \`${val.slice(0, 80)}\`` : " — **MISSING**"}`,
+          );
         }
 
         // HTTP→HTTPS redirect check.
@@ -97,8 +100,10 @@ Run after any Traefik/Cloudflare config change or before a production release.`,
           `curl -sI --max-time 8 'http://${url.replace("https://", "")}' | grep -i '^location:'`,
         );
         const loc = httpR.stdout.trim().toLowerCase();
-        const explicitHttps = loc.includes("location:") && loc.includes("https://");
-        const cfEdgeHttps = loc.includes("location:") && !loc.includes("https://");
+        const explicitHttps =
+          loc.includes("location:") && loc.includes("https://");
+        const cfEdgeHttps =
+          loc.includes("location:") && !loc.includes("https://");
         const noRedirect = !loc.includes("location:");
         const redirectIcon = explicitHttps ? "✅" : cfEdgeHttps ? "ℹ️" : "❌";
         const redirectNote = explicitHttps
@@ -109,7 +114,10 @@ Run after any Traefik/Cloudflare config change or before a production release.`,
         rows.push(`${redirectIcon} \`http→https redirect\`${redirectNote}`);
 
         const total = SECURITY_HEADERS.length + 1;
-        const summary = pass === total ? `✅ All ${total} checks passed` : `⚠️ ${pass}/${total} passed`;
+        const summary =
+          pass === total
+            ? `✅ All ${total} checks passed`
+            : `⚠️ ${pass}/${total} passed`;
         results.push(`## ${url}\n\n${summary}\n\n${rows.join("\n")}`);
       }
 
@@ -135,15 +143,17 @@ Run after CDN config changes or to baseline response performance.`,
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
     async ({ app }) => {
-      const targets: AppKey[] = app === "both" ? ["cloudless", "manager"] : [app as AppKey];
+      const targets: AppKey[] =
+        app === "both" ? ["cloudless", "manager"] : [app as AppKey];
       const results: string[] = [];
 
       for (const key of targets) {
         const url = APPS[key];
         // Use GET (not HEAD) so content-encoding is actually returned.
         // Discard the body (-o /dev/null) but dump response headers (-D -).
+        // -L follows the locale redirect (e.g. /→/en) so content-encoding is from the real page
         const cmd =
-          `curl -s --max-time 15 --compressed -o /dev/null -D - ` +
+          `curl -sL --max-time 15 --compressed -o /dev/null -D - ` +
           `-w '\\nTTFB: %{time_starttransfer}s | Total: %{time_total}s | Size: %{size_download}B' ` +
           `'${url}'`;
 
@@ -159,14 +169,19 @@ Run after CDN config changes or to baseline response performance.`,
         for (const h of PERF_HEADERS) {
           const val = headers[h];
           const ok = !!val;
-          rows.push(`${ok ? "✅" : "⚠️"} \`${h}\`${val ? `: \`${val.slice(0, 80)}\`` : " — not set"}`);
+          rows.push(
+            `${ok ? "✅" : "⚠️"} \`${h}\`${val ? `: \`${val.slice(0, 80)}\`` : " — not set"}`,
+          );
         }
 
         // Extract timing line
-        const timingLine = r.stdout.split("\n").find((l) => l.startsWith("TTFB:")) ?? "";
+        const timingLine =
+          r.stdout.split("\n").find((l) => l.startsWith("TTFB:")) ?? "";
         const compressed = headers["content-encoding"];
         rows.push(`📊 **Timing:** ${timingLine || "n/a"}`);
-        rows.push(`📦 **Compression:** ${compressed ? `✅ ${compressed}` : "⚠️ none"}`);
+        rows.push(
+          `📦 **Compression:** ${compressed ? `✅ ${compressed}` : "⚠️ none"}`,
+        );
 
         results.push(`## ${url}\n\n${rows.join("\n")}`);
       }
@@ -208,12 +223,16 @@ Run before a quarterly maintenance pass or when planning upgrades.`,
         );
 
         if (r.error || !r.stdout.trim()) {
-          results.push(`## ${repo}\n❌ Could not fetch package.json: ${r.error || "empty"}`);
+          results.push(
+            `## ${repo}\n❌ Could not fetch package.json: ${r.error || "empty"}`,
+          );
           continue;
         }
 
         const lines = r.stdout.trim().split("\n").filter(Boolean);
-        results.push(`## ${repo}\n\n\`\`\`\n${lines.join("\n")}\n\`\`\`\n\n_Run \`npm outdated\` locally for full semver diff._`);
+        results.push(
+          `## ${repo}\n\n\`\`\`\n${lines.join("\n")}\n\`\`\`\n\n_Run \`npm outdated\` locally for full semver diff._`,
+        );
       }
 
       return { content: [{ type: "text", text: results.join("\n\n---\n\n") }] };
@@ -237,12 +256,24 @@ This is the entry point for a full app audit — use it first, then drill into s
         runOnNode("omv-main", `curl -sI --max-time 10 '${APPS.cloudless}'`),
         runOnNode("omv-main", `curl -sI --max-time 10 '${APPS.manager}'`),
         // TTFB
-        runOnNode("omv-main", `curl -so /dev/null --max-time 10 -w '%{time_starttransfer}' '${APPS.cloudless}'`),
-        runOnNode("omv-main", `curl -so /dev/null --max-time 10 -w '%{time_starttransfer}' '${APPS.manager}'`),
-        // Compression check — GET (not HEAD): a HEAD response has no body, so
-        // content-encoding is often absent and would read as a false negative.
-        runOnNode("omv-main", `curl -s -o /dev/null -D - --max-time 10 --compressed '${APPS.cloudless}' | grep -i 'content-encoding'`),
-        runOnNode("omv-main", `curl -s -o /dev/null -D - --max-time 10 --compressed '${APPS.manager}' | grep -i 'content-encoding'`),
+        runOnNode(
+          "omv-main",
+          `curl -so /dev/null --max-time 10 -w '%{time_starttransfer}' '${APPS.cloudless}'`,
+        ),
+        runOnNode(
+          "omv-main",
+          `curl -so /dev/null --max-time 10 -w '%{time_starttransfer}' '${APPS.manager}'`,
+        ),
+        // Compression check — GET with -L (follow locale redirect /→/en) so content-encoding
+        // is from the actual page, not a 301 redirect response.
+        runOnNode(
+          "omv-main",
+          `curl -sL -o /dev/null -D - --max-time 10 --compressed '${APPS.cloudless}' | grep -i 'content-encoding'`,
+        ),
+        runOnNode(
+          "omv-main",
+          `curl -sL -o /dev/null -D - --max-time 10 --compressed '${APPS.manager}' | grep -i 'content-encoding'`,
+        ),
       ]);
 
       const [clH, mgH, clTTFB, mgTTFB, clEnc, mgEnc] = checks;
@@ -260,12 +291,18 @@ This is the entry point for a full app audit — use it first, then drill into s
 
         report.push(`## ${label}`);
         if (missing.length) {
-          report.push(`**Missing security headers (${missing.length}):** ${missing.map((h) => `\`${h}\``).join(", ")}`);
+          report.push(
+            `**Missing security headers (${missing.length}):** ${missing.map((h) => `\`${h}\``).join(", ")}`,
+          );
         } else {
           report.push("✅ All security headers present");
         }
-        report.push(`**Compression:** ${hasCompression ? "✅ enabled" : "⚠️ not detected"}`);
-        report.push(`**TTFB:** ${ttfbVal > 0 ? `${(ttfbVal * 1000).toFixed(0)}ms${ttfbVal > 1 ? " ⚠️ slow" : " ✅"}` : "n/a"}`);
+        report.push(
+          `**Compression:** ${hasCompression ? "✅ enabled" : "⚠️ not detected"}`,
+        );
+        report.push(
+          `**TTFB:** ${ttfbVal > 0 ? `${(ttfbVal * 1000).toFixed(0)}ms${ttfbVal > 1 ? " ⚠️ slow" : " ✅"}` : "n/a"}`,
+        );
         report.push("");
       }
 

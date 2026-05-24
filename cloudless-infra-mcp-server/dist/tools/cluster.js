@@ -18,7 +18,7 @@ Use this as a first step to assess overall cluster state.`,
         }),
         annotations: { readOnlyHint: true, destructiveHint: false },
     }, async ({ node }) => {
-        const cmd = "echo \"=== $(hostname) ===\"" +
+        const cmd = 'echo "=== $(hostname) ==="' +
             " && uptime" +
             " && echo '--- Disk ---'" +
             " && df -h / /srv 2>/dev/null || df -h /" +
