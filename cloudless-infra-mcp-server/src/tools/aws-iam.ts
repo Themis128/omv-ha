@@ -16,16 +16,22 @@ Returns a markdown table of users, their access keys, key status, and last-used 
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
     async () => {
-      const listUsersCmd =
-        `aws iam list-users --query 'Users[*].{UserName:UserName,Created:CreateDate,Arn:Arn}' --output json`;
+      const listUsersCmd = `aws iam list-users --query 'Users[*].{UserName:UserName,Created:CreateDate,Arn:Arn}' --output json`;
 
       const r = await runOnNode("omv-main", listUsersCmd);
       if (r.error) {
-        return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+        return {
+          content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+        };
       }
       if (r.code !== 0) {
         return {
-          content: [{ type: "text", text: `❌ aws iam list-users failed:\n\`\`\`\n${r.stderr}\n\`\`\`` }],
+          content: [
+            {
+              type: "text",
+              text: `❌ aws iam list-users failed:\n\`\`\`\n${r.stderr}\n\`\`\``,
+            },
+          ],
         };
       }
 
@@ -33,7 +39,14 @@ Returns a markdown table of users, their access keys, key status, and last-used 
       try {
         users = JSON.parse(r.stdout);
       } catch {
-        return { content: [{ type: "text", text: `❌ Failed to parse IAM users JSON:\n${r.stdout}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ Failed to parse IAM users JSON:\n${r.stdout}`,
+            },
+          ],
+        };
       }
 
       if (users.length === 0) {
@@ -70,7 +83,11 @@ Returns a markdown table of users, their access keys, key status, and last-used 
       for (const user of users) {
         const created = user.Created.slice(0, 10);
         const keysJson = keysByUser[user.UserName] ?? "";
-        let keyRows: Array<{ AccessKeyId: string; Status: string; CreateDate: string }> = [];
+        let keyRows: Array<{
+          AccessKeyId: string;
+          Status: string;
+          CreateDate: string;
+        }> = [];
         try {
           const parsed = JSON.parse(keysJson);
           keyRows = parsed.AccessKeyMetadata ?? [];
@@ -133,7 +150,9 @@ Useful to check if omv-main-cli (or another user) has a specific permission befo
 
       const r = await runOnNode("omv-main", cmd);
       if (r.error) {
-        return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+        return {
+          content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+        };
       }
       if (r.code !== 0) {
         return {
@@ -146,22 +165,40 @@ Useful to check if omv-main-cli (or another user) has a specific permission befo
         };
       }
 
-      let result: { EvaluationResults?: Array<{ EvalActionName: string; EvalDecision: string }> };
+      let result: {
+        EvaluationResults?: Array<{
+          EvalActionName: string;
+          EvalDecision: string;
+        }>;
+      };
       try {
         result = JSON.parse(r.stdout);
       } catch {
-        return { content: [{ type: "text", text: `❌ Failed to parse response:\n${r.stdout}` }] };
+        return {
+          content: [
+            { type: "text", text: `❌ Failed to parse response:\n${r.stdout}` },
+          ],
+        };
       }
 
       const evals = result.EvaluationResults ?? [];
-      const lines: string[] = [`## IAM Permission Check`, ``, `**User:** \`${user_name}\``, `**Action:** \`${action}\``, `**Resource:** \`${resource}\``, ``];
+      const lines: string[] = [
+        `## IAM Permission Check`,
+        ``,
+        `**User:** \`${user_name}\``,
+        `**Action:** \`${action}\``,
+        `**Resource:** \`${resource}\``,
+        ``,
+      ];
 
       if (evals.length === 0) {
         lines.push("No evaluation results returned.");
       } else {
         for (const ev of evals) {
           const allowed = ev.EvalDecision === "allowed";
-          lines.push(`**Decision:** ${allowed ? "✅ ALLOWED" : "❌ DENIED"} (\`${ev.EvalDecision}\`)`);
+          lines.push(
+            `**Decision:** ${allowed ? "✅ ALLOWED" : "❌ DENIED"} (\`${ev.EvalDecision}\`)`,
+          );
         }
       }
 
@@ -184,24 +221,47 @@ Useful to audit SSL/TLS certificates managed in AWS.`,
       const listCmd = `aws acm list-certificates --region us-east-1 --output json`;
       const r = await runOnNode("omv-main", listCmd);
       if (r.error) {
-        return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+        return {
+          content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+        };
       }
       if (r.code !== 0) {
         return {
-          content: [{ type: "text", text: `❌ acm list-certificates failed:\n\`\`\`\n${r.stderr}\n\`\`\`` }],
+          content: [
+            {
+              type: "text",
+              text: `❌ acm list-certificates failed:\n\`\`\`\n${r.stderr}\n\`\`\``,
+            },
+          ],
         };
       }
 
-      let listResult: { CertificateSummaryList?: Array<{ CertificateArn: string; DomainName: string }> };
+      let listResult: {
+        CertificateSummaryList?: Array<{
+          CertificateArn: string;
+          DomainName: string;
+        }>;
+      };
       try {
         listResult = JSON.parse(r.stdout);
       } catch {
-        return { content: [{ type: "text", text: `❌ Failed to parse certificate list:\n${r.stdout}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ Failed to parse certificate list:\n${r.stdout}`,
+            },
+          ],
+        };
       }
 
       const certs = listResult.CertificateSummaryList ?? [];
       if (certs.length === 0) {
-        return { content: [{ type: "text", text: "No ACM certificates found in us-east-1." }] };
+        return {
+          content: [
+            { type: "text", text: "No ACM certificates found in us-east-1." },
+          ],
+        };
       }
 
       // Describe each cert
@@ -242,15 +302,20 @@ Useful to audit SSL/TLS certificates managed in AWS.`,
           const c = detail.Certificate ?? {};
           domain = c.DomainName ?? domain;
           status = c.Status ?? "—";
-          expiry = c.NotAfter ? new Date(c.NotAfter).toISOString().slice(0, 10) : "—";
+          expiry = c.NotAfter
+            ? new Date(c.NotAfter).toISOString().slice(0, 10)
+            : "—";
           const sanList: string[] = c.SubjectAlternativeNames ?? [];
           sans = sanList.filter((s: string) => s !== domain).join(", ") || "—";
         } catch {
           // use defaults
         }
 
-        const arnShort = cert.CertificateArn.split("/").pop() ?? cert.CertificateArn;
-        lines.push(`| \`${domain}\` | ${status} | ${expiry} | \`...${arnShort}\` | ${sans} |`);
+        const arnShort =
+          cert.CertificateArn.split("/").pop() ?? cert.CertificateArn;
+        lines.push(
+          `| \`${domain}\` | ${status} | ${expiry} | \`...${arnShort}\` | ${sans} |`,
+        );
       }
 
       let text = lines.join("\n");
@@ -293,7 +358,9 @@ Run aws_check_iam_permissions first to verify the user currently lacks this perm
 
       const r = await runOnNode("omv-main", cmd);
       if (r.error) {
-        return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+        return {
+          content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+        };
       }
       if (r.code !== 0) {
         return {
@@ -345,7 +412,9 @@ Runs aws iam delete-user-policy on the Pi.`,
 
       const r = await runOnNode("omv-main", cmd);
       if (r.error) {
-        return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+        return {
+          content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+        };
       }
       if (r.code !== 0) {
         return {
@@ -387,7 +456,9 @@ Use aws_list_acm_certs to find the ARN first.`,
         certificate_arn: z
           .string()
           .min(1)
-          .describe("Full ARN of the ACM certificate to delete, e.g. arn:aws:acm:us-east-1:..."),
+          .describe(
+            "Full ARN of the ACM certificate to delete, e.g. arn:aws:acm:us-east-1:...",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
@@ -396,7 +467,11 @@ Use aws_list_acm_certs to find the ARN first.`,
       const describeCmd = `aws acm describe-certificate --certificate-arn "${certificate_arn}" --region us-east-1 --output json`;
       const descResult = await runOnNode("omv-main", describeCmd);
       if (descResult.error) {
-        return { content: [{ type: "text", text: `❌ SSH error: ${descResult.error}` }] };
+        return {
+          content: [
+            { type: "text", text: `❌ SSH error: ${descResult.error}` },
+          ],
+        };
       }
       if (descResult.code !== 0) {
         return {
@@ -417,7 +492,12 @@ Use aws_list_acm_certs to find the ARN first.`,
         certDomain = parsed.Certificate?.DomainName ?? "unknown";
       } catch {
         return {
-          content: [{ type: "text", text: `❌ Failed to parse describe-certificate response:\n${descResult.stdout}` }],
+          content: [
+            {
+              type: "text",
+              text: `❌ Failed to parse describe-certificate response:\n${descResult.stdout}`,
+            },
+          ],
         };
       }
 
@@ -444,7 +524,11 @@ Use aws_list_acm_certs to find the ARN first.`,
       const deleteCmd = `aws acm delete-certificate --certificate-arn "${certificate_arn}" --region us-east-1`;
       const deleteResult = await runOnNode("omv-main", deleteCmd);
       if (deleteResult.error) {
-        return { content: [{ type: "text", text: `❌ SSH error: ${deleteResult.error}` }] };
+        return {
+          content: [
+            { type: "text", text: `❌ SSH error: ${deleteResult.error}` },
+          ],
+        };
       }
       if (deleteResult.code !== 0) {
         return {

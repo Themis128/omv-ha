@@ -11,11 +11,17 @@ function resolveRepo(alias) {
     return GH_REPOS[alias] ?? alias;
 }
 async function ghJson(args) {
-    const { stdout } = await execFileAsync("gh", args, { encoding: "utf8", timeout: 45_000 });
+    const { stdout } = await execFileAsync("gh", args, {
+        encoding: "utf8",
+        timeout: 45_000,
+    });
     return JSON.parse(stdout);
 }
 async function ghRaw(args) {
-    const { stdout } = await execFileAsync("gh", args, { encoding: "utf8", timeout: 45_000 });
+    const { stdout } = await execFileAsync("gh", args, {
+        encoding: "utf8",
+        timeout: 45_000,
+    });
     return stdout.trim();
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,8 +53,16 @@ slash command but as a structured MCP tool.`,
         const fullRepo = resolveRepo(repo);
         try {
             // 1. Recent runs
-            const runs = await ghJson(["run", "list", "--repo", fullRepo, "--limit", String(limit),
-                "--json", "databaseId,workflowName,status,conclusion,createdAt,headBranch,url,event"]);
+            const runs = await ghJson([
+                "run",
+                "list",
+                "--repo",
+                fullRepo,
+                "--limit",
+                String(limit),
+                "--json",
+                "databaseId,workflowName,status,conclusion,createdAt,headBranch,url,event",
+            ]);
             // 2. Per-workflow: take the most recent run for each workflow name
             const byWorkflow = new Map();
             for (const r of runs) {
@@ -60,15 +74,21 @@ slash command but as a structured MCP tool.`,
             const firstFail = runs.find((r) => r.status === "completed" && r.conclusion === "failure");
             if (firstFail) {
                 try {
-                    const jobs = await ghJson(["api", `repos/${fullRepo}/actions/runs/${firstFail.databaseId}/jobs`]);
+                    const jobs = await ghJson([
+                        "api",
+                        `repos/${fullRepo}/actions/runs/${firstFail.databaseId}/jobs`,
+                    ]);
                     billingLock = jobs.jobs.some((j) => {
                         if (j.conclusion !== "failure" || (j.steps?.length ?? 0) > 0)
                             return false;
-                        const dt = new Date(j.completed_at).getTime() - new Date(j.started_at).getTime();
+                        const dt = new Date(j.completed_at).getTime() -
+                            new Date(j.started_at).getTime();
                         return dt >= 0 && dt < 15_000;
                     });
                 }
-                catch { /* best-effort */ }
+                catch {
+                    /* best-effort */
+                }
             }
             // 4. Runner fleet summary
             const runnersData = await ghJson(["api", `repos/${fullRepo}/actions/runners`]);
@@ -79,7 +99,10 @@ slash command but as a structured MCP tool.`,
             const running = [];
             const ok = [];
             for (const [wf, r] of byWorkflow) {
-                const ts = new Date(r.createdAt).toISOString().slice(0, 16).replace("T", " ");
+                const ts = new Date(r.createdAt)
+                    .toISOString()
+                    .slice(0, 16)
+                    .replace("T", " ");
                 const line = `\`${r.databaseId}\` **${wf}** | ${r.headBranch} | ${ts}`;
                 if (r.status === "in_progress" || r.status === "queued") {
                     running.push(`⏳ ${line}`);
@@ -105,7 +128,9 @@ slash command but as a structured MCP tool.`,
             if (fail.length > 0 && verdict !== "CRITICAL")
                 verdict = "DEGRADED";
             const verdictIcon = verdict === "HEALTHY" ? "✅" : verdict === "DEGRADED" ? "⚠️" : "🛑";
-            const parts = [`## ${verdictIcon} CI Dashboard — ${fullRepo} — ${verdict}`];
+            const parts = [
+                `## ${verdictIcon} CI Dashboard — ${fullRepo} — ${verdict}`,
+            ];
             if (issues.length > 0)
                 parts.push("\n**Critical issues:**\n" + issues.join("\n"));
             parts.push(`\n**Runners:** ${onlineCount}/${runnersData.total_count} online, ${busyCount} busy`);
@@ -119,7 +144,14 @@ slash command but as a structured MCP tool.`,
             return { content: [{ type: "text", text: parts.join("\n") }] };
         }
         catch (err) {
-            return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
+            };
         }
     });
     // ── gh_pr_checks ──────────────────────────────────────────────────────────
@@ -133,27 +165,33 @@ failing, pending, or skipped.`,
             repo: z
                 .enum(["cloudless.gr", "cloudless-manager", "omv-ha"])
                 .describe("Repo alias."),
-            pr: z
-                .number()
-                .int()
-                .describe("Pull request number."),
+            pr: z.number().int().describe("Pull request number."),
         }),
         annotations: { readOnlyHint: true, destructiveHint: false },
     }, async ({ repo, pr }) => {
         const fullRepo = resolveRepo(repo);
         try {
             // Get PR head SHA and metadata
-            const prData = await ghJson(["pr", "view", String(pr), "--repo", fullRepo,
-                "--json", "headRefName,headRefOid,title,state,url,statusCheckRollup"]);
+            const prData = await ghJson([
+                "pr",
+                "view",
+                String(pr),
+                "--repo",
+                fullRepo,
+                "--json",
+                "headRefName,headRefOid,title,state,url,statusCheckRollup",
+            ]);
             const checks = prData.statusCheckRollup ?? [];
             if (checks.length === 0) {
                 return {
-                    content: [{
+                    content: [
+                        {
                             type: "text",
                             text: `## PR #${pr} — ${prData.title}\n\n` +
                                 `Branch: \`${prData.headRefName}\` | State: ${prData.state}\n\n` +
                                 `No checks found. The PR may have no required status checks configured.`,
-                        }],
+                        },
+                    ],
                 };
             }
             const fail = [];
@@ -189,7 +227,14 @@ failing, pending, or skipped.`,
             return { content: [{ type: "text", text: parts.join("\n") }] };
         }
         catch (err) {
-            return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
+            };
         }
     });
     // ── gh_workflow_failure_logs ───────────────────────────────────────────────
@@ -220,12 +265,26 @@ Use after gh_ci_summary or gh_pr_checks identifies a failing run ID.`,
         const fullRepo = resolveRepo(repo);
         try {
             // Run metadata
-            const meta = await ghJson(["run", "view", String(run_id), "--repo", fullRepo,
-                "--json", "status,conclusion,displayTitle,workflowName,createdAt,url"]);
+            const meta = await ghJson([
+                "run",
+                "view",
+                String(run_id),
+                "--repo",
+                fullRepo,
+                "--json",
+                "status,conclusion,displayTitle,workflowName,createdAt,url",
+            ]);
             // Failure logs
             let logs = "";
             try {
-                logs = await ghRaw(["run", "view", String(run_id), "--repo", fullRepo, "--log-failed"]);
+                logs = await ghRaw([
+                    "run",
+                    "view",
+                    String(run_id),
+                    "--repo",
+                    fullRepo,
+                    "--log-failed",
+                ]);
             }
             catch (e) {
                 // gh exits non-zero when run didn't fail — surface a helpful message
@@ -242,17 +301,26 @@ Use after gh_ci_summary or gh_pr_checks identifies a failing run ID.`,
                 ? `\n\n... (truncated at ${max_lines} lines — increase max_lines or view full logs at the URL below)`
                 : "";
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
                         text: `## Failure logs — ${meta.workflowName} run ${run_id}\n` +
                             `**Conclusion:** ${meta.conclusion} | **Title:** ${meta.displayTitle}\n` +
                             `**View:** ${meta.url}\n\n` +
                             `\`\`\`\n${lines.join("\n")}${truncated}\n\`\`\``,
-                    }],
+                    },
+                ],
             };
         }
         catch (err) {
-            return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
+            };
         }
     });
     // ── gh_ci_flaky_detector ──────────────────────────────────────────────────
@@ -287,17 +355,28 @@ environment/race-condition issue (flaky).`,
     }, async ({ repo, workflow, limit }) => {
         const fullRepo = resolveRepo(repo);
         try {
-            const runs = await ghJson(["run", "list", "--repo", fullRepo, "--workflow", workflow,
-                "--limit", String(limit),
-                "--json", "databaseId,status,conclusion,createdAt,headBranch,displayTitle"]);
+            const runs = await ghJson([
+                "run",
+                "list",
+                "--repo",
+                fullRepo,
+                "--workflow",
+                workflow,
+                "--limit",
+                String(limit),
+                "--json",
+                "databaseId,status,conclusion,createdAt,headBranch,displayTitle",
+            ]);
             // Only completed runs for analysis
             const completed = runs.filter((r) => r.status === "completed");
             if (completed.length < 3) {
                 return {
-                    content: [{
+                    content: [
+                        {
                             type: "text",
                             text: `⚠️ Only ${completed.length} completed run(s) found for \`${workflow}\` — need at least 3 to detect flakiness.`,
-                        }],
+                        },
+                    ],
                 };
             }
             const successes = completed.filter((r) => r.conclusion === "success" || r.conclusion === "skipped");
@@ -350,14 +429,21 @@ environment/race-condition issue (flaky).`,
                 verdictIcon = "⚠️";
             }
             // Recent run timeline (newest first, max 20)
-            const timeline = completed.slice(0, 20).map((r) => {
+            const timeline = completed
+                .slice(0, 20)
+                .map((r) => {
                 const isOk = r.conclusion === "success" || r.conclusion === "skipped";
                 const icon = isOk ? "✅" : "❌";
-                const ts = new Date(r.createdAt).toISOString().slice(0, 16).replace("T", " ");
+                const ts = new Date(r.createdAt)
+                    .toISOString()
+                    .slice(0, 16)
+                    .replace("T", " ");
                 return `${icon} \`${r.databaseId}\` ${ts} \`${r.headBranch}\` ${r.displayTitle.slice(0, 60)}`;
-            }).join("\n");
+            })
+                .join("\n");
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
                         text: `## ${verdictIcon} Flaky Analysis — \`${workflow}\` on ${fullRepo}\n\n` +
                             `**Verdict:** ${verdict}\n` +
@@ -366,11 +452,19 @@ environment/race-condition issue (flaky).`,
                             `**Max failure streak:** ${maxFailStreak} | **Max success streak:** ${maxSuccessStreak}\n` +
                             `**Current streak:** ${currentStreak}× ${currentStreakType}\n\n` +
                             `### Recent runs (newest first)\n${timeline}`,
-                    }],
+                    },
+                ],
             };
         }
         catch (err) {
-            return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
+            };
         }
     });
     // ── gh_deployment_status ──────────────────────────────────────────────────
@@ -397,9 +491,18 @@ identify when a regression was introduced.`,
     }, async ({ repo, workflow }) => {
         const fullRepo = resolveRepo(repo);
         try {
-            const runs = await ghJson(["run", "list", "--repo", fullRepo, "--workflow", workflow,
-                "--limit", "20",
-                "--json", "databaseId,displayTitle,headBranch,headSha,status,conclusion,createdAt,updatedAt,url"]);
+            const runs = await ghJson([
+                "run",
+                "list",
+                "--repo",
+                fullRepo,
+                "--workflow",
+                workflow,
+                "--limit",
+                "20",
+                "--json",
+                "databaseId,displayTitle,headBranch,headSha,status,conclusion,createdAt,updatedAt,url",
+            ]);
             const lastSuccess = runs.find((r) => r.conclusion === "success");
             const lastFailed = runs.find((r) => r.conclusion === "failure");
             const inProgress = runs.find((r) => r.status === "in_progress" || r.status === "queued");
@@ -411,13 +514,18 @@ identify when a regression was introduced.`,
                     return `${Math.floor(mins / 60)}h ago`;
                 return `${Math.floor(mins / 1440)}d ago`;
             };
-            const parts = [`## 🚀 Deployment Status — ${fullRepo} / \`${workflow}\``];
+            const parts = [
+                `## 🚀 Deployment Status — ${fullRepo} / \`${workflow}\``,
+            ];
             if (inProgress) {
                 parts.push(`\n⏳ **Deploy in progress** — run \`${inProgress.databaseId}\` | ` +
                     `\`${inProgress.headSha.slice(0, 8)}\` | ${ago(inProgress.createdAt)}`);
             }
             if (lastSuccess) {
-                const ts = new Date(lastSuccess.updatedAt).toISOString().slice(0, 16).replace("T", " ");
+                const ts = new Date(lastSuccess.updatedAt)
+                    .toISOString()
+                    .slice(0, 16)
+                    .replace("T", " ");
                 parts.push(`\n✅ **Live (last successful deploy)**\n` +
                     `  SHA: \`${lastSuccess.headSha.slice(0, 8)}\`\n` +
                     `  Branch: \`${lastSuccess.headBranch}\`\n` +
@@ -429,21 +537,33 @@ identify when a regression was introduced.`,
                 parts.push(`\n⚠️ No successful deploy found in the last 20 runs.`);
             }
             if (lastFailed && lastFailed.databaseId !== lastSuccess?.databaseId) {
-                const ts = new Date(lastFailed.createdAt).toISOString().slice(0, 16).replace("T", " ");
+                const ts = new Date(lastFailed.createdAt)
+                    .toISOString()
+                    .slice(0, 16)
+                    .replace("T", " ");
                 parts.push(`\n❌ **Last failed deploy**\n` +
                     `  SHA: \`${lastFailed.headSha.slice(0, 8)}\`\n` +
                     `  ${ts} UTC (${ago(lastFailed.createdAt)}) | Run: [#${lastFailed.databaseId}](${lastFailed.url})\n` +
                     `  Use \`gh_workflow_failure_logs\` with run_id \`${lastFailed.databaseId}\` to diagnose.`);
             }
             // Is latest deploy the live one?
-            if (lastSuccess && runs[0]?.databaseId !== lastSuccess.databaseId && !inProgress) {
+            if (lastSuccess &&
+                runs[0]?.databaseId !== lastSuccess.databaseId &&
+                !inProgress) {
                 parts.push(`\n⚠️ **The latest run is NOT the live deploy.** A newer run (${runs[0]?.conclusion}) ` +
                     `may have overwritten or failed after the last success.`);
             }
             return { content: [{ type: "text", text: parts.join("\n") }] };
         }
         catch (err) {
-            return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
+            };
         }
     });
 }

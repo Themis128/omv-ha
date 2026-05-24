@@ -13,7 +13,8 @@ const NODE_TOKEN_PATH = `${K3S_DATA_DIR}/server/node-token`;
 
 async function fetchK3sToken(): Promise<string> {
   const r = await runOnNode("omv-main", `sudo cat ${NODE_TOKEN_PATH}`);
-  if (r.error) throw new Error(`Could not read node-token from omv-main: ${r.error}`);
+  if (r.error)
+    throw new Error(`Could not read node-token from omv-main: ${r.error}`);
   return r.stdout.trim();
 }
 
@@ -172,7 +173,9 @@ CAUTION: run_commands=true is destructive. Default false shows the commands only
         "omv-main",
         `${KUBECTL} delete node omv-ha --ignore-not-found`,
       );
-      results.push(del.error ? `❌ ${del.error}` : "```\n" + del.stdout + "\n```");
+      results.push(
+        del.error ? `❌ ${del.error}` : "```\n" + del.stdout + "\n```",
+      );
 
       // Steps 2–4 on omv-ha: uninstall + reinstall + env file
       results.push("\n### Steps 2–4: Uninstall + reinstall on omv-ha");
@@ -182,12 +185,19 @@ CAUTION: run_commands=true is destructive. Default false shows the commands only
         `sudo bash -c 'printf "${envFileContent.replace(/\n/g, "\\n")}" > /etc/systemd/system/k3s-agent.service.env && systemctl daemon-reload && systemctl start k3s-agent'`,
       ].join(" && ");
       const install = await runOnNode("omv-ha", installCmd);
-      results.push(install.error ? `❌ ${install.error}` : "```\n" + install.stdout + "\n```");
+      results.push(
+        install.error
+          ? `❌ ${install.error}`
+          : "```\n" + install.stdout + "\n```",
+      );
 
       // Verify
       results.push("\n### Verification (waiting 8s for agent to connect)");
       await new Promise((resolve) => setTimeout(resolve, 8000));
-      const verify = await runOnNode("omv-main", `${KUBECTL} get nodes -o wide`);
+      const verify = await runOnNode(
+        "omv-main",
+        `${KUBECTL} get nodes -o wide`,
+      );
       results.push(
         verify.error ? `❌ ${verify.error}` : "```\n" + verify.stdout + "\n```",
       );

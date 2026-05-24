@@ -211,19 +211,23 @@ SAFE to run multiple times (idempotent).`,
             const r = await runOnNode("omv-main", checkCmd);
             const body = r.error ? `❌ SSH error: ${r.error}` : r.stdout.trim();
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
                         text: `# cloudless.online Cleanup — DRY RUN\n\nRun with \`dry_run: false\` to actually delete.\n\n\`\`\`\n${body}\n\`\`\`\n\n**Remaining manual steps:**\n- Delete R53 health check \`30a69f1c\` via AWS console (no CLI permission)\n- Delete Cloudflare DNS records for cloudless.online zone via \`cloudflare_delete_dns_record\``,
-                    }],
+                    },
+                ],
             };
         }
         const r = await runOnNode("omv-main", deleteCmd);
         const body = r.error ? `❌ SSH error: ${r.error}` : r.stdout.trim();
         return {
-            content: [{
+            content: [
+                {
                     type: "text",
                     text: `# cloudless.online Cleanup — EXECUTED\n\n\`\`\`\n${body}\n\`\`\`\n\n**Remaining manual steps:**\n- Delete R53 health check \`30a69f1c\` via AWS console\n- Delete Cloudflare DNS records for cloudless.online zone via \`cloudflare_delete_dns_record\``,
-                }],
+                },
+            ],
         };
     });
     // ── failover_network_check ────────────────────────────────────────────────

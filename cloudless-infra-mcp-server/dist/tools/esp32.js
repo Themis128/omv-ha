@@ -53,7 +53,12 @@ Use to check if any cluster or dependency issues are currently firing.`,
         const alerts = result.data;
         if (!alerts.length) {
             return {
-                content: [{ type: "text", text: "✅ No active alerts — all cluster checks clean." }],
+                content: [
+                    {
+                        type: "text",
+                        text: "✅ No active alerts — all cluster checks clean.",
+                    },
+                ],
             };
         }
         const lines = [`## Active Alerts (${alerts.length})`, ""];
@@ -131,7 +136,9 @@ Useful for post-incident analysis and identifying flapping services.`,
         const result = await apiGet(`/api/alerts/history?limit=${limit}`);
         if (result.error) {
             return {
-                content: [{ type: "text", text: `❌ Alert API unreachable: ${result.error}` }],
+                content: [
+                    { type: "text", text: `❌ Alert API unreachable: ${result.error}` },
+                ],
             };
         }
         const history = result.data;

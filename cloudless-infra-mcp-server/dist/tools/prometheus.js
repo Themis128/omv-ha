@@ -26,7 +26,9 @@ Examples: "up", "kube_pod_status_phase{namespace='default'}", "node_memory_MemAv
         const cmd = promCurl(`/api/v1/query?query=${encodeShell(query)}`);
         const r = await runOnNode("omv-main", cmd);
         if (r.error) {
-            return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+            return {
+                content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+            };
         }
         let parsed;
         try {
@@ -34,13 +36,21 @@ Examples: "up", "kube_pod_status_phase{namespace='default'}", "node_memory_MemAv
         }
         catch {
             return {
-                content: [{ type: "text", text: `❌ Failed to parse Prometheus response:\n\`\`\`\n${r.stdout}\n\`\`\`` }],
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Failed to parse Prometheus response:\n\`\`\`\n${r.stdout}\n\`\`\``,
+                    },
+                ],
             };
         }
         if (parsed.status !== "success") {
             return {
                 content: [
-                    { type: "text", text: `❌ Prometheus error: ${parsed.error ?? "unknown"}\n\nStatus: ${parsed.status}` },
+                    {
+                        type: "text",
+                        text: `❌ Prometheus error: ${parsed.error ?? "unknown"}\n\nStatus: ${parsed.status}`,
+                    },
                 ],
             };
         }
@@ -48,10 +58,21 @@ Examples: "up", "kube_pod_status_phase{namespace='default'}", "node_memory_MemAv
         const results = parsed.data?.result ?? [];
         if (results.length === 0) {
             return {
-                content: [{ type: "text", text: `## Prometheus Query: \`${query}\`\n\nNo results returned (empty series).` }],
+                content: [
+                    {
+                        type: "text",
+                        text: `## Prometheus Query: \`${query}\`\n\nNo results returned (empty series).`,
+                    },
+                ],
             };
         }
-        const lines = [`## Prometheus Query: \`${query}\``, ``, `**Result type:** ${resultType}`, `**Series count:** ${results.length}`, ``];
+        const lines = [
+            `## Prometheus Query: \`${query}\``,
+            ``,
+            `**Result type:** ${resultType}`,
+            `**Series count:** ${results.length}`,
+            ``,
+        ];
         if (resultType === "vector") {
             lines.push("| Metric Labels | Value |");
             lines.push("|---------------|-------|");
@@ -102,7 +123,9 @@ Returns a markdown table: job | endpoint | state | last scrape | error.`,
         const cmd = promCurl(`/api/v1/targets${stateParam}`);
         const r = await runOnNode("omv-main", cmd);
         if (r.error) {
-            return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+            return {
+                content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+            };
         }
         let parsed;
         try {
@@ -110,12 +133,22 @@ Returns a markdown table: job | endpoint | state | last scrape | error.`,
         }
         catch {
             return {
-                content: [{ type: "text", text: `❌ Failed to parse targets response:\n\`\`\`\n${r.stdout}\n\`\`\`` }],
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Failed to parse targets response:\n\`\`\`\n${r.stdout}\n\`\`\``,
+                    },
+                ],
             };
         }
         if (parsed.status !== "success") {
             return {
-                content: [{ type: "text", text: `❌ Prometheus error: ${parsed.error ?? "unknown"}` }],
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Prometheus error: ${parsed.error ?? "unknown"}`,
+                    },
+                ],
             };
         }
         const activeTargets = parsed.data?.activeTargets ?? [];
@@ -132,7 +165,9 @@ Returns a markdown table: job | endpoint | state | last scrape | error.`,
             const job = t.labels["job"] ?? "—";
             const endpoint = t.scrapeUrl ?? "—";
             const health = t.health === "up" ? "✅ up" : `❌ ${t.health}`;
-            const lastScrape = t.lastScrape ? new Date(t.lastScrape).toISOString().slice(11, 19) + "Z" : "—";
+            const lastScrape = t.lastScrape
+                ? new Date(t.lastScrape).toISOString().slice(11, 19) + "Z"
+                : "—";
             const err = t.lastError ? t.lastError.slice(0, 60) : "—";
             lines.push(`| \`${job}\` | \`${endpoint}\` | ${health} | ${lastScrape} | ${err} |`);
         }
@@ -154,7 +189,9 @@ Includes alert name, labels, and the time it started firing.`,
         const cmd = promCurl("/api/v1/alerts");
         const r = await runOnNode("omv-main", cmd);
         if (r.error) {
-            return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+            return {
+                content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+            };
         }
         let parsed;
         try {
@@ -162,18 +199,33 @@ Includes alert name, labels, and the time it started firing.`,
         }
         catch {
             return {
-                content: [{ type: "text", text: `❌ Failed to parse alerts response:\n\`\`\`\n${r.stdout}\n\`\`\`` }],
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Failed to parse alerts response:\n\`\`\`\n${r.stdout}\n\`\`\``,
+                    },
+                ],
             };
         }
         if (parsed.status !== "success") {
             return {
-                content: [{ type: "text", text: `❌ Prometheus error: ${parsed.error ?? "unknown"}` }],
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Prometheus error: ${parsed.error ?? "unknown"}`,
+                    },
+                ],
             };
         }
         const alerts = (parsed.data?.alerts ?? []).filter((a) => a.state === "firing");
         if (alerts.length === 0) {
             return {
-                content: [{ type: "text", text: "## Prometheus Alerts\n\n✅ No firing alerts." }],
+                content: [
+                    {
+                        type: "text",
+                        text: "## Prometheus Alerts\n\n✅ No firing alerts.",
+                    },
+                ],
             };
         }
         // Group by severity
@@ -184,16 +236,24 @@ Includes alert name, labels, and the time it started firing.`,
                 bySeverity[sev] = [];
             bySeverity[sev].push(alert);
         }
-        const lines = [`## Prometheus Firing Alerts`, ``, `**Total firing:** ${alerts.length}`, ``];
+        const lines = [
+            `## Prometheus Firing Alerts`,
+            ``,
+            `**Total firing:** ${alerts.length}`,
+            ``,
+        ];
         const severityOrder = ["critical", "warning", "info", "unknown"];
-        const sortedSeverities = Object.keys(bySeverity).sort((a, b) => (severityOrder.indexOf(a) + 1 || 99) - (severityOrder.indexOf(b) + 1 || 99));
+        const sortedSeverities = Object.keys(bySeverity).sort((a, b) => (severityOrder.indexOf(a) + 1 || 99) -
+            (severityOrder.indexOf(b) + 1 || 99));
         for (const sev of sortedSeverities) {
             const icon = sev === "critical" ? "🔴" : sev === "warning" ? "🟡" : "🔵";
             lines.push(`### ${icon} ${sev.toUpperCase()} (${bySeverity[sev].length})`);
             lines.push("");
             for (const a of bySeverity[sev]) {
                 const name = a.labels["alertname"] ?? "unknown";
-                const activeAt = a.activeAt ? new Date(a.activeAt).toISOString().slice(0, 19) + "Z" : "—";
+                const activeAt = a.activeAt
+                    ? new Date(a.activeAt).toISOString().slice(0, 19) + "Z"
+                    : "—";
                 const summary = a.annotations["summary"] ?? a.annotations["message"] ?? "";
                 lines.push(`- **${name}** — firing since ${activeAt}${summary ? `\n  > ${summary}` : ""}`);
             }
@@ -217,7 +277,9 @@ Useful for auditing what alerting rules are active.`,
         const cmd = promCurl("/api/v1/rules");
         const r = await runOnNode("omv-main", cmd);
         if (r.error) {
-            return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+            return {
+                content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+            };
         }
         let parsed;
         try {
@@ -225,17 +287,34 @@ Useful for auditing what alerting rules are active.`,
         }
         catch {
             return {
-                content: [{ type: "text", text: `❌ Failed to parse rules response:\n\`\`\`\n${r.stdout}\n\`\`\`` }],
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Failed to parse rules response:\n\`\`\`\n${r.stdout}\n\`\`\``,
+                    },
+                ],
             };
         }
         if (parsed.status !== "success") {
             return {
-                content: [{ type: "text", text: `❌ Prometheus error: ${parsed.error ?? "unknown"}` }],
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Prometheus error: ${parsed.error ?? "unknown"}`,
+                    },
+                ],
             };
         }
         const groups = parsed.data?.groups ?? [];
         if (groups.length === 0) {
-            return { content: [{ type: "text", text: "## Prometheus Rules\n\nNo rule groups found." }] };
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: "## Prometheus Rules\n\nNo rule groups found.",
+                    },
+                ],
+            };
         }
         const totalRules = groups.reduce((sum, g) => sum + g.rules.length, 0);
         const lines = [

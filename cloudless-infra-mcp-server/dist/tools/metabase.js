@@ -38,7 +38,10 @@ Note: Metabase takes ~4.5 minutes to become ready after startup (initialDelaySec
         const r = await runOnNode("omv-main", cmd);
         const text = r.error
             ? `❌ SSH failed: ${r.error}`
-            : "```\n" + r.stdout + (r.stderr ? "\nSTDERR:\n" + r.stderr : "") + "\n```";
+            : "```\n" +
+                r.stdout +
+                (r.stderr ? "\nSTDERR:\n" + r.stderr : "") +
+                "\n```";
         return { content: [{ type: "text", text }] };
     });
     // ── metabase_h2_query ─────────────────────────────────────────────────────
@@ -57,7 +60,9 @@ Example queries:
   SELECT id, email, is_superuser, is_active FROM core_user;
   SELECT id, name, engine FROM metabase_database;`,
         inputSchema: z.object({
-            sql: z.string().describe("SQL query to execute against the H2 database"),
+            sql: z
+                .string()
+                .describe("SQL query to execute against the H2 database"),
             scale_down_first: z
                 .boolean()
                 .default(true)
@@ -99,7 +104,9 @@ Example queries:
             lines.push(scaleUp.stdout || scaleUp.error || "done");
             lines.push("Note: Metabase takes ~4.5 minutes to become ready (initialDelaySeconds=240)");
         }
-        return { content: [{ type: "text", text: "```\n" + lines.join("\n") + "\n```" }] };
+        return {
+            content: [{ type: "text", text: "```\n" + lines.join("\n") + "\n```" }],
+        };
     });
     // ── metabase_reset_password ───────────────────────────────────────────────
     server.registerTool("metabase_reset_password", {
@@ -134,10 +141,12 @@ Standard password: TH!123789th!`,
         // Validate hash prefix
         if (!bcrypt_hash.startsWith("$2a$")) {
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
                         text: "❌ Hash must use $2a$ prefix (not $2b$). jBCrypt in Metabase v0.55 rejects $2b$ hashes. Regenerate with: bcrypt.gensalt(10, prefix=b'2a')",
-                    }],
+                    },
+                ],
             };
         }
         lines.push("=== Step 1: Scale Metabase to 0 ===");
@@ -157,7 +166,8 @@ Standard password: TH!123789th!`,
                     spec: {
                         nodeSelector: { "kubernetes.io/hostname": "omv" },
                         restartPolicy: "Never",
-                        containers: [{
+                        containers: [
+                            {
                                 name: "h2-reset",
                                 image: MB_IMAGE,
                                 imagePullPolicy: "IfNotPresent",
@@ -176,12 +186,17 @@ Standard password: TH!123789th!`,
                                         `java -cp /app/metabase.jar org.h2.tools.Shell -url "${H2_URL}" -user "" -password "" -sql "SELECT id, email, password_salt FROM core_user WHERE id=1;"\n` +
                                         `echo '=== DONE ==='`,
                                 ],
-                                volumeMounts: [{ name: "metabase-data", mountPath: "/metabase-data" }],
-                            }],
-                        volumes: [{
+                                volumeMounts: [
+                                    { name: "metabase-data", mountPath: "/metabase-data" },
+                                ],
+                            },
+                        ],
+                        volumes: [
+                            {
                                 name: "metabase-data",
                                 persistentVolumeClaim: { claimName: "metabase-data" },
-                            }],
+                            },
+                        ],
                     },
                 },
             },
@@ -206,7 +221,9 @@ Standard password: TH!123789th!`,
         lines.push(scaleUp.stdout || scaleUp.error || "done");
         lines.push("Metabase will be ready in ~4.5 minutes (initialDelaySeconds=240).");
         lines.push(`To verify login once ready, use metabase_check_health with verify_login=true.`);
-        return { content: [{ type: "text", text: "```\n" + lines.join("\n") + "\n```" }] };
+        return {
+            content: [{ type: "text", text: "```\n" + lines.join("\n") + "\n```" }],
+        };
     });
     // ── metabase_duckdb_lock_fix ──────────────────────────────────────────────
     server.registerTool("metabase_duckdb_lock_fix", {
@@ -230,7 +247,9 @@ The lock occurs because the previous Metabase pod held the lock; when killed, PI
         lines.push("\n=== Current pod state ===");
         const r3 = await runOnNode("omv-main", `${KUBECTL} get pods -n ${NS} -o wide`);
         lines.push(r3.stdout || r3.error || "");
-        return { content: [{ type: "text", text: "```\n" + lines.join("\n") + "\n```" }] };
+        return {
+            content: [{ type: "text", text: "```\n" + lines.join("\n") + "\n```" }],
+        };
     });
     // ── metabase_get_logs ─────────────────────────────────────────────────────
     server.registerTool("metabase_get_logs", {

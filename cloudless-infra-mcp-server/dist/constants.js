@@ -8,15 +8,13 @@ export const SSH_CONFIG = {
         host: process.env.OMV_HA_HOST ?? "192.168.1.130",
         port: Number(process.env.PI_SSH_PORT ?? 22),
         username: process.env.PI_SSH_USER ?? "tbaltzakis",
-        privateKeyPath: process.env.PI_SSH_KEY_PATH ??
-            join(homedir(), ".ssh", "id_ed25519"),
+        privateKeyPath: process.env.PI_SSH_KEY_PATH ?? join(homedir(), ".ssh", "id_ed25519"),
     },
     "omv-main": {
         host: process.env.OMV_MAIN_HOST ?? "192.168.1.128",
         port: Number(process.env.PI_SSH_PORT ?? 22),
         username: process.env.PI_SSH_USER ?? "tbaltzakis",
-        privateKeyPath: process.env.PI_SSH_KEY_PATH ??
-            join(homedir(), ".ssh", "id_ed25519"),
+        privateKeyPath: process.env.PI_SSH_KEY_PATH ?? join(homedir(), ".ssh", "id_ed25519"),
     },
 };
 // ---------------------------------------------------------------------------

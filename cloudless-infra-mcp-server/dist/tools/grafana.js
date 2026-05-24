@@ -25,7 +25,9 @@ Access is via SSH to omv-main (Grafana is not exposed externally).`,
         const cmd = grafanaCurl("/api/health");
         const r = await runOnNode("omv-main", cmd);
         if (r.error) {
-            return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+            return {
+                content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+            };
         }
         let parsed = {};
         try {
@@ -34,7 +36,10 @@ Access is via SSH to omv-main (Grafana is not exposed externally).`,
         catch {
             return {
                 content: [
-                    { type: "text", text: `❌ Failed to parse Grafana health response:\n\`\`\`\n${r.stdout}\n\`\`\`` },
+                    {
+                        type: "text",
+                        text: `❌ Failed to parse Grafana health response:\n\`\`\`\n${r.stdout}\n\`\`\``,
+                    },
                 ],
             };
         }
@@ -65,7 +70,9 @@ Use the UID to construct a Grafana URL for direct access.`,
         const cmd = grafanaCurl("/api/search?type=dash-db&limit=500");
         const r = await runOnNode("omv-main", cmd);
         if (r.error) {
-            return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+            return {
+                content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+            };
         }
         let dashboards;
         try {
@@ -74,13 +81,21 @@ Use the UID to construct a Grafana URL for direct access.`,
         catch {
             return {
                 content: [
-                    { type: "text", text: `❌ Failed to parse dashboards response:\n\`\`\`\n${r.stdout}\n\`\`\`` },
+                    {
+                        type: "text",
+                        text: `❌ Failed to parse dashboards response:\n\`\`\`\n${r.stdout}\n\`\`\``,
+                    },
                 ],
             };
         }
         if (!Array.isArray(dashboards)) {
             return {
-                content: [{ type: "text", text: `❌ Unexpected response format:\n\`\`\`\n${r.stdout}\n\`\`\`` }],
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Unexpected response format:\n\`\`\`\n${r.stdout}\n\`\`\``,
+                    },
+                ],
             };
         }
         let filtered = dashboards;
@@ -139,7 +154,9 @@ Useful for verifying Prometheus, Loki, or other backends are connected.`,
         const cmd = grafanaCurl("/api/datasources");
         const r = await runOnNode("omv-main", cmd);
         if (r.error) {
-            return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+            return {
+                content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+            };
         }
         let datasources;
         try {
@@ -148,12 +165,19 @@ Useful for verifying Prometheus, Loki, or other backends are connected.`,
         catch {
             return {
                 content: [
-                    { type: "text", text: `❌ Failed to parse datasources response:\n\`\`\`\n${r.stdout}\n\`\`\`` },
+                    {
+                        type: "text",
+                        text: `❌ Failed to parse datasources response:\n\`\`\`\n${r.stdout}\n\`\`\``,
+                    },
                 ],
             };
         }
         if (!Array.isArray(datasources) || datasources.length === 0) {
-            return { content: [{ type: "text", text: "No datasources configured in Grafana." }] };
+            return {
+                content: [
+                    { type: "text", text: "No datasources configured in Grafana." },
+                ],
+            };
         }
         const lines = [
             "## Grafana Datasources",
@@ -183,14 +207,18 @@ Use grafana_check_health after to confirm the new pod is ready.`,
             ` && kubectl rollout status deployment/kube-prom-grafana -n monitoring --timeout=180s`;
         const r = await runOnNode("omv-main", restartCmd);
         if (r.error) {
-            return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+            return {
+                content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+            };
         }
         const success = r.code === 0;
         const output = [r.stdout, r.stderr].filter(Boolean).join("\n");
         const lines = [
             `## Grafana Restart`,
             ``,
-            success ? "✅ Rollout completed successfully." : `❌ Rollout failed (exit code ${r.code}).`,
+            success
+                ? "✅ Rollout completed successfully."
+                : `❌ Rollout failed (exit code ${r.code}).`,
             ``,
             "```",
             output.slice(0, 2000),
@@ -215,11 +243,15 @@ This covers Grafana-managed alert rules (not Prometheus alerting rules — use p
         }),
         annotations: { readOnlyHint: true, destructiveHint: false },
     }, async ({ active_only }) => {
-        const filterParam = active_only ? "?active=true&silenced=false&inhibited=false" : "";
+        const filterParam = active_only
+            ? "?active=true&silenced=false&inhibited=false"
+            : "";
         const cmd = grafanaCurl(`/api/alertmanager/grafana/api/v2/alerts${filterParam}`);
         const r = await runOnNode("omv-main", cmd);
         if (r.error) {
-            return { content: [{ type: "text", text: `❌ SSH error: ${r.error}` }] };
+            return {
+                content: [{ type: "text", text: `❌ SSH error: ${r.error}` }],
+            };
         }
         let alerts;
         try {
@@ -228,13 +260,21 @@ This covers Grafana-managed alert rules (not Prometheus alerting rules — use p
         catch {
             return {
                 content: [
-                    { type: "text", text: `❌ Failed to parse Grafana alerts response:\n\`\`\`\n${r.stdout}\n\`\`\`` },
+                    {
+                        type: "text",
+                        text: `❌ Failed to parse Grafana alerts response:\n\`\`\`\n${r.stdout}\n\`\`\``,
+                    },
                 ],
             };
         }
         if (!Array.isArray(alerts)) {
             return {
-                content: [{ type: "text", text: `❌ Unexpected response format:\n\`\`\`\n${r.stdout.slice(0, 500)}\n\`\`\`` }],
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ Unexpected response format:\n\`\`\`\n${r.stdout.slice(0, 500)}\n\`\`\``,
+                    },
+                ],
             };
         }
         if (alerts.length === 0) {
@@ -262,7 +302,8 @@ This covers Grafana-managed alert rules (not Prometheus alerting rules — use p
             ``,
         ];
         const severityOrder = ["critical", "warning", "info", "unknown"];
-        const sortedSeverities = Object.keys(bySeverity).sort((a, b) => (severityOrder.indexOf(a) + 1 || 99) - (severityOrder.indexOf(b) + 1 || 99));
+        const sortedSeverities = Object.keys(bySeverity).sort((a, b) => (severityOrder.indexOf(a) + 1 || 99) -
+            (severityOrder.indexOf(b) + 1 || 99));
         for (const sev of sortedSeverities) {
             const icon = sev === "critical" ? "🔴" : sev === "warning" ? "🟡" : "🔵";
             lines.push(`### ${icon} ${sev.toUpperCase()} (${bySeverity[sev].length})`);
