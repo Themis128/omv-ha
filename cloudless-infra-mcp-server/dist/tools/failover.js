@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runOnNode, runOnBothNodes, nodeLabel } from "../services/ssh.js";
+import { CLOUDFRONT_DISTRIBUTION_ID, TAILSCALE_FUNNEL_HOST, K3S_TRAEFIK_VIP, } from "../constants.js";
 export function registerFailoverTools(server) {
     // ── failover_check_readiness ──────────────────────────────────────────────
     server.registerTool("failover_check_readiness", {
@@ -106,25 +107,128 @@ CAUTION: This modifies data on OMV-HA. Use dry_run=true to preview first.`,
     });
     // ── failover_check_secondary_app ─────────────────────────────────────────
     server.registerTool("failover_check_secondary_app", {
-        title: "Check Cloudless Secondary App Failover Path",
-        description: `Verify the full failover chain for cloudless.gr:
-1. Pi 5 app listening on port 18443
-2. APIGW reachability (secondary path)
-3. Route 53 secondary health check status (via Pi IPv6 → APIGW → Lambda → Pi)
-4. Current IPv6 address of Pi 5 (must match APIGW lambda config)
-Use when cloudless.gr primary (Lambda/CloudFront) might be degraded and you need to confirm the failover path is healthy.`,
+        title: "Check Cloudless k3s Failover Path (Tailscale Funnel)",
+        description: `Verify the full HA failover chain for cloudless.gr (2026-05-23 architecture):
+1. Tailscale Funnel active on omv.tail8eb71.ts.net → localhost:18443
+2. k3s Traefik VIP (192.168.1.200:18443) health for Host: cloudless.gr and Host: omv.tail8eb71.ts.net
+3. CloudFront secondary origin reachability check
+4. k3s pod health in cloudless namespace
+Use when CloudFront primary (Lambda/SST) is degraded and you need to confirm the k3s fallback is ready.`,
         inputSchema: z.object({}),
         annotations: { readOnlyHint: true, destructiveHint: false },
     }, async () => {
-        const cmd = `echo '=== Port 18443 Listen ===' && sudo ss -tlnp | grep 18443 || echo '❌ NOT LISTENING on 18443'` +
-            ` && echo '=== App Health ===' && curl -sk --max-time 5 https://localhost:18443/api/health 2>&1 | head -10 || echo '❌ health endpoint unreachable'` +
-            ` && echo '=== IPv6 Global ===' && ip -6 addr show | grep 'scope global' | awk '{print $2}' | cut -d/ -f1` +
-            ` && echo '=== K3s pods ===' && sudo k3s kubectl get pods -A --no-headers 2>/dev/null | grep -v 'Running' || echo '(all pods running or K3s not applicable)'`;
+        const cmd = `echo '=== Tailscale Funnel status ===' && tailscale funnel status 2>&1 | head -6` +
+            ` && echo '=== k3s health [Host: cloudless.gr] ===' && curl -sk -o /dev/null -w "%{http_code}" --resolve "cloudless.gr:18443:${K3S_TRAEFIK_VIP}" -H "Host: cloudless.gr" https://${K3S_TRAEFIK_VIP}:18443/api/health 2>&1` +
+            ` && echo '' && echo '=== k3s health [Host: ${TAILSCALE_FUNNEL_HOST}] ===' && curl -sk -o /dev/null -w "%{http_code}" --resolve "${TAILSCALE_FUNNEL_HOST}:18443:${K3S_TRAEFIK_VIP}" -H "Host: ${TAILSCALE_FUNNEL_HOST}" https://${K3S_TRAEFIK_VIP}:18443/api/health 2>&1` +
+            ` && echo '' && echo '=== k3s ingress hosts ===' && kubectl get ingress cloudless -n cloudless -o jsonpath='{.spec.rules[*].host}' 2>&1` +
+            ` && echo '' && echo '=== cloudless pods ===' && kubectl get pods -n cloudless -o wide 2>&1 | head -10` +
+            ` && echo '=== cert status ===' && kubectl get certificate -n cloudless 2>&1`;
         const r = await runOnNode("omv-main", cmd);
         const text = r.error
             ? `❌ Cannot reach OMV main: ${r.error}`
-            : "```\n" + r.stdout + "\n```";
+            : "# k3s HA Failover Path Check\n\n```\n" + r.stdout + "\n```";
         return { content: [{ type: "text", text }] };
+    });
+    // ── ha_check_cloudfront_failover ─────────────────────────────────────────
+    server.registerTool("ha_check_cloudfront_failover", {
+        title: "Check CloudFront HA Origin Group Config",
+        description: `Verify the CloudFront origin group failover configuration for cloudless.gr.
+Checks:
+- Distribution status (Deployed vs InProgress)
+- Origins present (default + k3s-ha)
+- OriginGroup primary-with-ha exists with correct failover codes
+- DefaultCacheBehavior target is the origin group
+- /api/* CacheBehavior points to primary only
+- Route 53 PRIMARY health check status for cloudless.gr
+Uses the AWS CLI on omv-main (omv-main-cli IAM user).`,
+        inputSchema: z.object({}),
+        annotations: { readOnlyHint: true, destructiveHint: false },
+    }, async () => {
+        const cmd = `echo '=== CloudFront distribution status ===' && aws cloudfront get-distribution --id ${CLOUDFRONT_DISTRIBUTION_ID} --query 'Distribution.Status' --output text` +
+            ` && echo '=== Origins ===' && aws cloudfront get-distribution-config --id ${CLOUDFRONT_DISTRIBUTION_ID} --query 'DistributionConfig.Origins.Items[*].{Id:Id,Domain:DomainName}' --output table` +
+            ` && echo '=== OriginGroups ===' && aws cloudfront get-distribution-config --id ${CLOUDFRONT_DISTRIBUTION_ID} --query 'DistributionConfig.OriginGroups' --output json` +
+            ` && echo '=== DefaultCacheBehavior target + methods ===' && aws cloudfront get-distribution-config --id ${CLOUDFRONT_DISTRIBUTION_ID} --query 'DistributionConfig.DefaultCacheBehavior.{Target:TargetOriginId,Methods:AllowedMethods.Items}' --output json` +
+            ` && echo '=== CacheBehaviors ===' && aws cloudfront get-distribution-config --id ${CLOUDFRONT_DISTRIBUTION_ID} --query 'DistributionConfig.CacheBehaviors.Items[*].{Path:PathPattern,Target:TargetOriginId,Methods:AllowedMethods.Quantity}' --output table` +
+            ` && echo '=== R53 PRIMARY health check ===' && aws route53 get-health-check-status --health-check-id e239ad5c-dd17-40d7-8045-a153715168cf --query 'HealthCheckObservations[*].{Region:Region,Status:StatusReport.Status}' --output table 2>&1 | head -20`;
+        const r = await runOnNode("omv-main", cmd);
+        const text = r.error
+            ? `❌ Cannot reach OMV main: ${r.error}`
+            : "# CloudFront HA Failover Config\n\n```\n" + r.stdout + "\n```";
+        return { content: [{ type: "text", text }] };
+    });
+    // ── ha_test_k3s_origin ────────────────────────────────────────────────────
+    server.registerTool("ha_test_k3s_origin", {
+        title: "Test k3s as CloudFront Secondary Origin",
+        description: `End-to-end test of the k3s failover origin as CloudFront would reach it.
+Tests both host headers that k3s must accept:
+- Host: cloudless.gr (normal traffic, Cloudflare Tunnel path)
+- Host: omv.tail8eb71.ts.net (CloudFront secondary origin host)
+Also tests a GET and a redirect (/) to simulate real page load failover.
+All curls go directly to 192.168.1.200:18443 (k3s Traefik MetalLB VIP).`,
+        inputSchema: z.object({}),
+        annotations: { readOnlyHint: true, destructiveHint: false },
+    }, async () => {
+        const vip = K3S_TRAEFIK_VIP;
+        const funnel = TAILSCALE_FUNNEL_HOST;
+        const cmd = `echo '--- /api/health [Host: cloudless.gr] ---' && curl -sk -o /dev/null -w "HTTP %{http_code}\\n" --resolve "cloudless.gr:18443:${vip}" -H "Host: cloudless.gr" https://${vip}:18443/api/health` +
+            ` && echo '--- / [Host: cloudless.gr] ---' && curl -sk -o /dev/null -w "HTTP %{http_code}\\n" --resolve "cloudless.gr:18443:${vip}" -H "Host: cloudless.gr" https://${vip}:18443/` +
+            ` && echo '--- /api/health [Host: ${funnel}] ---' && curl -sk -o /dev/null -w "HTTP %{http_code}\\n" --resolve "${funnel}:18443:${vip}" -H "Host: ${funnel}" https://${vip}:18443/api/health` +
+            ` && echo '--- / [Host: ${funnel}] ---' && curl -sk -o /dev/null -w "HTTP %{http_code}\\n" --resolve "${funnel}:18443:${vip}" -H "Host: ${funnel}" https://${vip}:18443/` +
+            ` && echo '--- /api/health [Host: www.cloudless.gr] ---' && curl -sk -o /dev/null -w "HTTP %{http_code}\\n" --resolve "www.cloudless.gr:18443:${vip}" -H "Host: www.cloudless.gr" https://${vip}:18443/api/health`;
+        const r = await runOnNode("omv-main", cmd);
+        const body = r.error ? `❌ SSH error: ${r.error}` : r.stdout.trim();
+        const expected = "Expected: /api/health → 200, / → 307 (locale redirect)";
+        const text = `# k3s Origin Test Results\n\n${expected}\n\n\`\`\`\n${body}\n\`\`\``;
+        return { content: [{ type: "text", text }] };
+    });
+    // ── ha_cleanup_cloudless_online ───────────────────────────────────────────
+    server.registerTool("ha_cleanup_cloudless_online", {
+        title: "Clean Up cloudless.online Artifacts",
+        description: `Remove remaining cloudless.online references from the k3s cluster.
+Actions taken:
+- Deletes the cloudless-online-tls Certificate resource in the cloudless namespace
+- Deletes the cloudless-online-tls Secret in the cloudless namespace
+- Reports any remaining cloudless.online references in manifests
+Does NOT touch Cloudflare DNS records (use cloudflare_delete_dns_record for those).
+Does NOT touch Route 53 health check 30a69f1c (needs console — no CLI permission).
+SAFE to run multiple times (idempotent).`,
+        inputSchema: z.object({
+            dry_run: z
+                .boolean()
+                .default(true)
+                .describe("Preview only — do not delete anything. Default: true"),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false },
+    }, async ({ dry_run }) => {
+        const checkCmd = `echo '=== cloudless-online-tls certificate ===' && kubectl get certificate cloudless-online-tls -n cloudless 2>&1` +
+            ` && echo '=== cloudless-online-tls secret ===' && kubectl get secret cloudless-online-tls -n cloudless 2>&1` +
+            ` && echo '=== remaining .online references in ingress/configmaps ===' && kubectl get ingress,configmap -n cloudless -o yaml 2>&1 | grep 'cloudless.online' | head -10 || echo '(none found)'`;
+        const deleteCmd = `kubectl delete certificate cloudless-online-tls -n cloudless 2>&1 || echo '(certificate already gone)'` +
+            ` && kubectl delete secret cloudless-online-tls -n cloudless 2>&1 || echo '(secret already gone)'` +
+            ` && echo '✅ Deleted cloudless-online-tls certificate and secret'` +
+            ` && echo '=== Remaining references ===' && kubectl get all,ingress,certificate -n cloudless -o yaml 2>&1 | grep 'cloudless.online' | head -10 || echo '(none remaining)'`;
+        if (dry_run) {
+            const r = await runOnNode("omv-main", checkCmd);
+            const body = r.error ? `❌ SSH error: ${r.error}` : r.stdout.trim();
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `# cloudless.online Cleanup — DRY RUN\n\nRun with \`dry_run: false\` to actually delete.\n\n\`\`\`\n${body}\n\`\`\`\n\n**Remaining manual steps:**\n- Delete R53 health check \`30a69f1c\` via AWS console (no CLI permission)\n- Delete Cloudflare DNS records for cloudless.online zone via \`cloudflare_delete_dns_record\``,
+                    },
+                ],
+            };
+        }
+        const r = await runOnNode("omv-main", deleteCmd);
+        const body = r.error ? `❌ SSH error: ${r.error}` : r.stdout.trim();
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `# cloudless.online Cleanup — EXECUTED\n\n\`\`\`\n${body}\n\`\`\`\n\n**Remaining manual steps:**\n- Delete R53 health check \`30a69f1c\` via AWS console\n- Delete Cloudflare DNS records for cloudless.online zone via \`cloudflare_delete_dns_record\``,
+                },
+            ],
+        };
     });
     // ── failover_network_check ────────────────────────────────────────────────
     server.registerTool("failover_network_check", {

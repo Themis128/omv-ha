@@ -14,12 +14,18 @@ const DEPLOY_WORKFLOW = "deploy-pi.yml";
 // ---------------------------------------------------------------------------
 
 async function ghJson<T>(args: string[]): Promise<T> {
-  const { stdout } = await execFileAsync("gh", args, { encoding: "utf8", timeout: 30_000 });
+  const { stdout } = await execFileAsync("gh", args, {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
   return JSON.parse(stdout) as T;
 }
 
 async function ghRaw(args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("gh", args, { encoding: "utf8", timeout: 30_000 });
+  const { stdout } = await execFileAsync("gh", args, {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
   return stdout.trim();
 }
 
@@ -40,7 +46,13 @@ interface ManifestShape {
 }
 
 function formatManifestAudit(m: ManifestShape, source: string): string {
-  const checks: Array<{ label: string; key: string; ok: boolean; got: string; note?: string }> = [
+  const checks: Array<{
+    label: string;
+    key: string;
+    ok: boolean;
+    got: string;
+    note?: string;
+  }> = [
     {
       label: "name",
       key: "name",
@@ -76,8 +88,12 @@ function formatManifestAudit(m: ManifestShape, source: string): string {
     {
       label: "display_override",
       key: "display_override",
-      ok: Array.isArray(m.display_override) && (m.display_override as unknown[]).length >= 2,
-      got: Array.isArray(m.display_override) ? `[${(m.display_override as unknown[]).length} entries]` : JSON.stringify(m.display_override),
+      ok:
+        Array.isArray(m.display_override) &&
+        (m.display_override as unknown[]).length >= 2,
+      got: Array.isArray(m.display_override)
+        ? `[${(m.display_override as unknown[]).length} entries]`
+        : JSON.stringify(m.display_override),
       note: "expected ≥2 entries",
     },
     {
@@ -109,14 +125,18 @@ function formatManifestAudit(m: ManifestShape, source: string): string {
       label: "icons",
       key: "icons",
       ok: Array.isArray(m.icons) && (m.icons as unknown[]).length >= 2,
-      got: Array.isArray(m.icons) ? `[${(m.icons as unknown[]).length} icons]` : JSON.stringify(m.icons),
+      got: Array.isArray(m.icons)
+        ? `[${(m.icons as unknown[]).length} icons]`
+        : JSON.stringify(m.icons),
       note: "expected ≥2 entries",
     },
     {
       label: "shortcuts",
       key: "shortcuts",
       ok: Array.isArray(m.shortcuts) && (m.shortcuts as unknown[]).length >= 3,
-      got: Array.isArray(m.shortcuts) ? `[${(m.shortcuts as unknown[]).length} shortcuts]` : JSON.stringify(m.shortcuts),
+      got: Array.isArray(m.shortcuts)
+        ? `[${(m.shortcuts as unknown[]).length} shortcuts]`
+        : JSON.stringify(m.shortcuts),
       note: "expected ≥3 shortcuts",
     },
   ];
@@ -129,7 +149,10 @@ function formatManifestAudit(m: ManifestShape, source: string): string {
 
   const passed = checks.filter((c) => c.ok).length;
   const total = checks.length;
-  const summary = passed === total ? `✅ All ${total} checks passed` : `⚠️ ${passed}/${total} checks passed`;
+  const summary =
+    passed === total
+      ? `✅ All ${total} checks passed`
+      : `⚠️ ${passed}/${total} checks passed`;
 
   return `## PWA Manifest Audit — ${source}\n\n${summary}\n\n${rows.join("\n")}`;
 }
@@ -186,12 +209,24 @@ Returns a pass/fail table with occurrence counts. Run after any navbar change.`,
       const r = await runOnNode("omv-main", cmd);
 
       if (r.error) {
-        return { content: [{ type: "text", text: `❌ SSH failed: ${r.error}` }] };
+        return {
+          content: [{ type: "text", text: `❌ SSH failed: ${r.error}` }],
+        };
       }
 
-      const lines = (r.stdout || r.stderr || "").trim().split("\n").filter(Boolean);
+      const lines = (r.stdout || r.stderr || "")
+        .trim()
+        .split("\n")
+        .filter(Boolean);
       if (lines.length === 0) {
-        return { content: [{ type: "text", text: `❌ No output from audit script. File may not exist at ${f}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ No output from audit script. File may not exist at ${f}`,
+            },
+          ],
+        };
       }
 
       const rows = lines.map((line) => {
@@ -202,13 +237,18 @@ Returns a pass/fail table with occurrence counts. Run after any navbar change.`,
 
       const passed = lines.filter((l) => l.startsWith("OK")).length;
       const total = lines.length;
-      const summary = passed === total ? `✅ All ${total} checks passed` : `⚠️ ${passed}/${total} passed`;
+      const summary =
+        passed === total
+          ? `✅ All ${total} checks passed`
+          : `⚠️ ${passed}/${total} passed`;
 
       return {
-        content: [{
-          type: "text",
-          text: `## Navbar Audit — ${f}\n\n${summary}\n\n${rows.join("\n")}`,
-        }],
+        content: [
+          {
+            type: "text",
+            text: `## Navbar Audit — ${f}\n\n${summary}\n\n${rows.join("\n")}`,
+          },
+        ],
       };
     },
   );
@@ -234,62 +274,97 @@ source options:
         live_url: z
           .string()
           .optional()
-          .describe('Base URL for live check, e.g. "https://cloudless.online". Required when source=live.'),
+          .describe(
+            'Base URL for live check, e.g. "https://cloudless.online". Required when source=live.',
+          ),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
     async ({ source, live_url }) => {
       if (source === "live") {
         if (!live_url) {
-          return { content: [{ type: "text", text: "❌ live_url is required when source=live (e.g. https://cloudless.online)" }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: "❌ live_url is required when source=live (e.g. https://cloudless.online)",
+              },
+            ],
+          };
         }
         const url = `${live_url.replace(/\/$/, "")}/api/pwa-manifest`;
         const r = await runOnNode("omv-main", `curl -sf '${url}' 2>&1`);
         if (r.error) {
-          return { content: [{ type: "text", text: `❌ SSH failed: ${r.error}` }] };
+          return {
+            content: [{ type: "text", text: `❌ SSH failed: ${r.error}` }],
+          };
         }
         try {
           const manifest = JSON.parse(r.stdout) as ManifestShape;
-          return { content: [{ type: "text", text: formatManifestAudit(manifest, url) }] };
+          return {
+            content: [
+              { type: "text", text: formatManifestAudit(manifest, url) },
+            ],
+          };
         } catch {
           return {
-            content: [{
-              type: "text",
-              text: `❌ Invalid JSON from ${url}:\n\`\`\`\n${r.stdout.slice(0, 600)}\n\`\`\``,
-            }],
+            content: [
+              {
+                type: "text",
+                text: `❌ Invalid JSON from ${url}:\n\`\`\`\n${r.stdout.slice(0, 600)}\n\`\`\``,
+              },
+            ],
           };
         }
       }
 
       if (source === "api-source") {
         const filePath = `${REPO_DIR}/src/app/api/pwa-manifest/route.ts`;
-        const r = await runOnNode("omv-main", `cat '${filePath}' 2>/dev/null || echo FILE_NOT_FOUND`);
+        const r = await runOnNode(
+          "omv-main",
+          `cat '${filePath}' 2>/dev/null || echo FILE_NOT_FOUND`,
+        );
         if (r.error || r.stdout.includes("FILE_NOT_FOUND")) {
-          return { content: [{ type: "text", text: `❌ File not found: ${filePath}` }] };
+          return {
+            content: [{ type: "text", text: `❌ File not found: ${filePath}` }],
+          };
         }
         return {
-          content: [{
-            type: "text",
-            text: `## API Route Source — ${filePath}\n\`\`\`typescript\n${r.stdout}\n\`\`\``,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `## API Route Source — ${filePath}\n\`\`\`typescript\n${r.stdout}\n\`\`\``,
+            },
+          ],
         };
       }
 
       // Static manifest
       const filePath = `${REPO_DIR}/public/manifest.webmanifest`;
-      const r = await runOnNode("omv-main", `cat '${filePath}' 2>/dev/null || echo FILE_NOT_FOUND`);
+      const r = await runOnNode(
+        "omv-main",
+        `cat '${filePath}' 2>/dev/null || echo FILE_NOT_FOUND`,
+      );
       if (r.error || r.stdout.includes("FILE_NOT_FOUND")) {
-        return { content: [{ type: "text", text: `❌ File not found: ${filePath}` }] };
+        return {
+          content: [{ type: "text", text: `❌ File not found: ${filePath}` }],
+        };
       }
       try {
         const manifest = JSON.parse(r.stdout) as ManifestShape;
-        return { content: [{ type: "text", text: formatManifestAudit(manifest, filePath) }] };
+        return {
+          content: [
+            { type: "text", text: formatManifestAudit(manifest, filePath) },
+          ],
+        };
       } catch (e) {
         return {
-          content: [{
-            type: "text",
-            text: `❌ Invalid JSON in ${filePath}: ${e}\n\n\`\`\`\n${r.stdout.slice(0, 800)}\n\`\`\``,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `❌ Invalid JSON in ${filePath}: ${e}\n\n\`\`\`\n${r.stdout.slice(0, 800)}\n\`\`\``,
+            },
+          ],
         };
       }
     },
@@ -314,20 +389,32 @@ Use gh_workflow_list to check recent run history without triggering a new one.`,
         timeout_minutes: z
           .number()
           .default(15)
-          .describe("Max minutes to wait before returning partial status. Default 15."),
+          .describe(
+            "Max minutes to wait before returning partial status. Default 15.",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
     async ({ ref, timeout_minutes }) => {
       // Trigger
       try {
-        await ghRaw(["workflow", "run", DEPLOY_WORKFLOW, "--repo", FULL_REPO, "--ref", ref]);
+        await ghRaw([
+          "workflow",
+          "run",
+          DEPLOY_WORKFLOW,
+          "--repo",
+          FULL_REPO,
+          "--ref",
+          ref,
+        ]);
       } catch (err) {
         return {
-          content: [{
-            type: "text",
-            text: `❌ Failed to trigger \`${DEPLOY_WORKFLOW}\` on **${FULL_REPO}** (ref: ${ref})\n\n${err instanceof Error ? err.message : String(err)}`,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `❌ Failed to trigger \`${DEPLOY_WORKFLOW}\` on **${FULL_REPO}** (ref: ${ref})\n\n${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
         };
       }
 
@@ -338,28 +425,41 @@ Use gh_workflow_list to check recent run history without triggering a new one.`,
       let runId: number;
       try {
         const raw = await ghRaw([
-          "run", "list",
-          "--repo", FULL_REPO,
-          "--workflow", DEPLOY_WORKFLOW,
-          "--limit", "1",
-          "--json", "databaseId,status,headBranch",
+          "run",
+          "list",
+          "--repo",
+          FULL_REPO,
+          "--workflow",
+          DEPLOY_WORKFLOW,
+          "--limit",
+          "1",
+          "--json",
+          "databaseId,status,headBranch",
         ]);
-        const runs = JSON.parse(raw) as Array<{ databaseId: number; status: string; headBranch: string }>;
+        const runs = JSON.parse(raw) as Array<{
+          databaseId: number;
+          status: string;
+          headBranch: string;
+        }>;
         if (!runs[0]) {
           return {
-            content: [{
-              type: "text",
-              text: `✅ Triggered \`${DEPLOY_WORKFLOW}\` on **${FULL_REPO}** (ref: ${ref}). Run ID not yet visible — retry \`gh_workflow_list\` in ~10s.`,
-            }],
+            content: [
+              {
+                type: "text",
+                text: `✅ Triggered \`${DEPLOY_WORKFLOW}\` on **${FULL_REPO}** (ref: ${ref}). Run ID not yet visible — retry \`gh_workflow_list\` in ~10s.`,
+              },
+            ],
           };
         }
         runId = runs[0].databaseId;
       } catch (err) {
         return {
-          content: [{
-            type: "text",
-            text: `✅ Triggered but failed to get run ID: ${err instanceof Error ? err.message : String(err)}\nCheck: https://github.com/${FULL_REPO}/actions`,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `✅ Triggered but failed to get run ID: ${err instanceof Error ? err.message : String(err)}\nCheck: https://github.com/${FULL_REPO}/actions`,
+            },
+          ],
         };
       }
 
@@ -376,24 +476,45 @@ Use gh_workflow_list to check recent run history without triggering a new one.`,
               name: string;
               status: string;
               conclusion: string;
-              steps: Array<{ name: string; status: string; conclusion: string; number: number }>;
+              steps: Array<{
+                name: string;
+                status: string;
+                conclusion: string;
+                number: number;
+              }>;
             }>;
-          }>(["run", "view", String(runId), "--repo", FULL_REPO, "--json", "status,conclusion,jobs"]);
+          }>([
+            "run",
+            "view",
+            String(runId),
+            "--repo",
+            FULL_REPO,
+            "--json",
+            "status,conclusion,jobs",
+          ]);
 
           if (data.status === "completed") {
             const icon = data.conclusion === "success" ? "✅" : "❌";
             const jobs = data.jobs
               .map((j) => {
                 const jIcon =
-                  j.conclusion === "success" ? "✅" :
-                  j.conclusion === "failure" ? "❌" :
-                  j.status === "in_progress" ? "⏳" : "⏸";
+                  j.conclusion === "success"
+                    ? "✅"
+                    : j.conclusion === "failure"
+                      ? "❌"
+                      : j.status === "in_progress"
+                        ? "⏳"
+                        : "⏸";
                 const steps = j.steps
                   .map((s) => {
                     const sIcon =
-                      s.conclusion === "success" ? "✓" :
-                      s.conclusion === "failure" ? "✗" :
-                      s.status === "in_progress" ? "▶" : "·";
+                      s.conclusion === "success"
+                        ? "✓"
+                        : s.conclusion === "failure"
+                          ? "✗"
+                          : s.status === "in_progress"
+                            ? "▶"
+                            : "·";
                     return `    ${sIcon} ${s.name}`;
                   })
                   .join("\n");
@@ -402,29 +523,35 @@ Use gh_workflow_list to check recent run history without triggering a new one.`,
               .join("\n\n");
 
             return {
-              content: [{
-                type: "text",
-                text: `## ${icon} Deploy ${data.conclusion.toUpperCase()} — ${FULL_REPO}\n\n**Run:** ${runId} | **Ref:** ${ref}\n\n${jobs}\n\nView: https://github.com/${FULL_REPO}/actions/runs/${runId}`,
-              }],
+              content: [
+                {
+                  type: "text",
+                  text: `## ${icon} Deploy ${data.conclusion.toUpperCase()} — ${FULL_REPO}\n\n**Run:** ${runId} | **Ref:** ${ref}\n\n${jobs}\n\nView: https://github.com/${FULL_REPO}/actions/runs/${runId}`,
+                },
+              ],
             };
           }
 
           await new Promise((r) => setTimeout(r, pollMs));
         } catch (err) {
           return {
-            content: [{
-              type: "text",
-              text: `❌ Error polling run ${runId}: ${err instanceof Error ? err.message : String(err)}`,
-            }],
+            content: [
+              {
+                type: "text",
+                text: `❌ Error polling run ${runId}: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
           };
         }
       }
 
       return {
-        content: [{
-          type: "text",
-          text: `⏱️ Timeout after ${timeout_minutes} min — run ${runId} still in progress.\nView: https://github.com/${FULL_REPO}/actions/runs/${runId}`,
-        }],
+        content: [
+          {
+            type: "text",
+            text: `⏱️ Timeout after ${timeout_minutes} min — run ${runId} still in progress.\nView: https://github.com/${FULL_REPO}/actions/runs/${runId}`,
+          },
+        ],
       };
     },
   );

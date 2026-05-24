@@ -14,9 +14,7 @@ const CRONJOBS = [
     "ml-detect-anomaly",
     "ml-content-decay",
 ];
-const CronJobSchema = z
-    .enum(CRONJOBS)
-    .describe("ML pipeline CronJob name");
+const CronJobSchema = z.enum(CRONJOBS).describe("ML pipeline CronJob name");
 function duckdbQueryCmd(sql) {
     const escaped = sql.replace(/"/g, '\\"').replace(/\n/g, " ");
     return (`${KUBECTL} exec -n ${NS} deployment/duckdb-api -- ` +
@@ -46,7 +44,10 @@ Use this to diagnose pipeline failures or verify a successful weekly training ru
         const r = await runOnNode("omv-main", cmd);
         const text = r.error
             ? `❌ SSH failed: ${r.error}`
-            : "```\n" + r.stdout + (r.stderr ? "\nSTDERR:\n" + r.stderr : "") + "\n```";
+            : "```\n" +
+                r.stdout +
+                (r.stderr ? "\nSTDERR:\n" + r.stderr : "") +
+                "\n```";
         return { content: [{ type: "text", text }] };
     });
     // ── ml_trigger_job ────────────────────────────────────────────────────────
@@ -75,7 +76,10 @@ Normal trigger order: ml-feature-engineer → ml-train-rfm → ml-train-churn �
         const r = await runOnNode("omv-main", cmd);
         const text = r.error
             ? `❌ SSH failed: ${r.error}`
-            : "```\n" + r.stdout + (r.stderr ? "\nSTDERR:\n" + r.stderr : "") + "\n```";
+            : "```\n" +
+                r.stdout +
+                (r.stderr ? "\nSTDERR:\n" + r.stderr : "") +
+                "\n```";
         return { content: [{ type: "text", text }] };
     });
     // ── ml_get_logs ───────────────────────────────────────────────────────────
@@ -112,7 +116,10 @@ Fetches the last 200 lines by default.`,
         const r = await runOnNode("omv-main", cmd);
         const text = r.error
             ? `❌ SSH failed: ${r.error}`
-            : "```\n" + r.stdout + (r.stderr ? "\nSTDERR:\n" + r.stderr : "") + "\n```";
+            : "```\n" +
+                r.stdout +
+                (r.stderr ? "\nSTDERR:\n" + r.stderr : "") +
+                "\n```";
         return { content: [{ type: "text", text }] };
     });
     // ── ml_run_history ────────────────────────────────────────────────────────
@@ -156,7 +163,13 @@ scores_recs (recommendations), anomaly_flags (API anomalies), scores_decay (cont
 Returns the first N rows with all columns.`,
         inputSchema: z.object({
             table: z
-                .enum(["scores_rfm", "scores_churn", "scores_recs", "anomaly_flags", "scores_decay"])
+                .enum([
+                "scores_rfm",
+                "scores_churn",
+                "scores_recs",
+                "anomaly_flags",
+                "scores_decay",
+            ])
                 .describe("Which scores table to query"),
             limit: z
                 .number()
@@ -202,7 +215,10 @@ Use this to confirm a training job successfully saved its model artifact.`,
         const r = await runOnNode("omv-main", cmd);
         const text = r.error
             ? `❌ SSH failed: ${r.error}`
-            : "```\n" + r.stdout + (r.stderr ? "\nSTDERR:\n" + r.stderr : "") + "\n```";
+            : "```\n" +
+                r.stdout +
+                (r.stderr ? "\nSTDERR:\n" + r.stderr : "") +
+                "\n```";
         return { content: [{ type: "text", text }] };
     });
     // ── ml_anomaly_latest ─────────────────────────────────────────────────────
@@ -281,7 +297,8 @@ Run ml_pipeline_status first to confirm the 503 is lock-related (not a code erro
     }, async ({ dry_run }) => {
         if (dry_run) {
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
                         text: [
                             "**DRY RUN — unlock procedure:**",
@@ -294,7 +311,8 @@ Run ml_pipeline_status first to confirm the 503 is lock-related (not a code erro
                             "",
                             "Run with dry_run=false to execute.",
                         ].join("\n"),
-                    }],
+                    },
+                ],
             };
         }
         const steps = [];
@@ -326,7 +344,9 @@ Run ml_pipeline_status first to confirm the 503 is lock-related (not a code erro
             steps.push(`\n❌ Unlock failed at step: ${msg}`);
             steps.push("You may need to scale deployments back up manually.");
         }
-        return { content: [{ type: "text", text: "```\n" + steps.join("\n") + "\n```" }] };
+        return {
+            content: [{ type: "text", text: "```\n" + steps.join("\n") + "\n```" }],
+        };
     });
 }
 //# sourceMappingURL=ml.js.map
