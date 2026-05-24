@@ -15,6 +15,8 @@ import { registerAwsIamTools } from "./tools/aws-iam.js";
 import { registerPrometheusTools } from "./tools/prometheus.js";
 import { registerGrafanaTools } from "./tools/grafana.js";
 import { registerCiTools } from "./tools/ci.js";
+import { registerOmvHaAgentTools } from "./tools/omv-ha-agent.js";
+import { registerEsp32Tools } from "./tools/esp32.js";
 const server = new McpServer({
     name: "cloudless-infra",
     version: "1.0.0",
@@ -35,6 +37,8 @@ registerAwsIamTools(server);
 registerPrometheusTools(server);
 registerGrafanaTools(server);
 registerCiTools(server);
+registerOmvHaAgentTools(server);
+registerEsp32Tools(server);
 // Start the stdio transport
 const transport = new StdioServerTransport();
 await server.connect(transport);
