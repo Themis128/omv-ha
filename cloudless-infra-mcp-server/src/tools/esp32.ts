@@ -62,7 +62,12 @@ Use to check if any cluster or dependency issues are currently firing.`,
       const alerts = result.data as Array<Record<string, unknown>>;
       if (!alerts.length) {
         return {
-          content: [{ type: "text", text: "✅ No active alerts — all cluster checks clean." }],
+          content: [
+            {
+              type: "text",
+              text: "✅ No active alerts — all cluster checks clean.",
+            },
+          ],
         };
       }
       const lines = [`## Active Alerts (${alerts.length})`, ""];
@@ -71,7 +76,9 @@ Use to check if any cluster or dependency issues are currently firing.`,
         const icon = SEVERITY_ICON[sev] ?? "⚪";
         lines.push(`${icon} **${a.code}** — ${sev.toUpperCase()}`);
         lines.push(`   message: ${a.message}`);
-        lines.push(`   status: ${a.status}  count: ${a.count}  last_seen: ${a.last_seen ?? a.updated_at}`);
+        lines.push(
+          `   status: ${a.status}  count: ${a.count}  last_seen: ${a.last_seen ?? a.updated_at}`,
+        );
         if (a.auto_fix) lines.push(`   auto-fix: ${a.auto_fix}`);
         lines.push("");
       }
@@ -153,7 +160,9 @@ Useful for post-incident analysis and identifying flapping services.`,
       const result = await apiGet(`/api/alerts/history?limit=${limit}`);
       if (result.error) {
         return {
-          content: [{ type: "text", text: `❌ Alert API unreachable: ${result.error}` }],
+          content: [
+            { type: "text", text: `❌ Alert API unreachable: ${result.error}` },
+          ],
         };
       }
       const history = result.data as Array<Record<string, unknown>>;
@@ -199,9 +208,15 @@ RSSI guide: ≥ −65 dBm 🟢 good / ≥ −80 dBm 🟡 marginal / < −80 dBm 
         const d = esp32Result.data as Record<string, unknown>;
         const rssi = Number(d.rssi ?? 0);
         const rssiIcon = rssi >= -65 ? "🟢" : rssi >= -80 ? "🟡" : "🔴";
-        lines.push(`**Firmware:** \`${d.firmware_version ?? "unknown"}\`  |  **IP:** ${d.ip ?? "—"}`);
-        lines.push(`**Signal:** ${rssiIcon} ${rssi} dBm  |  **Free RAM:** ${d.free_ram ?? "—"} bytes`);
-        lines.push(`**Uptime:** ${d.uptime ?? "—"} s  |  **Boot count:** ${d.boot_count ?? "—"}`);
+        lines.push(
+          `**Firmware:** \`${d.firmware_version ?? "unknown"}\`  |  **IP:** ${d.ip ?? "—"}`,
+        );
+        lines.push(
+          `**Signal:** ${rssiIcon} ${rssi} dBm  |  **Free RAM:** ${d.free_ram ?? "—"} bytes`,
+        );
+        lines.push(
+          `**Uptime:** ${d.uptime ?? "—"} s  |  **Boot count:** ${d.boot_count ?? "—"}`,
+        );
         lines.push(`**Last heartbeat:** ${d.last_heartbeat ?? "—"}`);
         if (d.device_id) lines.push(`**Device ID:** ${d.device_id}`);
       }

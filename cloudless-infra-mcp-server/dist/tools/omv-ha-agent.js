@@ -150,7 +150,9 @@ CAUTION: run_commands=true is destructive. Default false shows the commands only
             `sudo bash -c 'printf "${envFileContent.replace(/\n/g, "\\n")}" > /etc/systemd/system/k3s-agent.service.env && systemctl daemon-reload && systemctl start k3s-agent'`,
         ].join(" && ");
         const install = await runOnNode("omv-ha", installCmd);
-        results.push(install.error ? `❌ ${install.error}` : "```\n" + install.stdout + "\n```");
+        results.push(install.error
+            ? `❌ ${install.error}`
+            : "```\n" + install.stdout + "\n```");
         // Verify
         results.push("\n### Verification (waiting 8s for agent to connect)");
         await new Promise((resolve) => setTimeout(resolve, 8000));

@@ -54,7 +54,14 @@ Always run this before adding or deleting records to check current state.`,
         if (!data.result.length)
             return { content: [{ type: "text", text: "No DNS records found." }] };
         const rows = data.result.map((r) => `${r.id}  ${r.type.padEnd(6)}  ${r.name.padEnd(40)}  ${r.content}  TTL=${r.ttl}  proxied=${r.proxied}`);
-        return { content: [{ type: "text", text: `DNS records (${data.result.length}):\n\n${rows.join("\n")}` }] };
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `DNS records (${data.result.length}):\n\n${rows.join("\n")}`,
+                },
+            ],
+        };
     });
     // ── cloudflare_add_dns_record ─────────────────────────────────────────────
     server.registerTool("cloudflare_add_dns_record", {
@@ -77,7 +84,14 @@ Supports A, AAAA, CNAME, TXT. For tunnel CNAMEs use content="<tunnel-id>.cfargot
         if (!data.success)
             return { content: [{ type: "text", text: `❌ ${cfError(data)}` }] };
         const r = data.result;
-        return { content: [{ type: "text", text: `✅ Created ${r.type} "${r.name}" → ${r.content} (ID: ${r.id})` }] };
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `✅ Created ${r.type} "${r.name}" → ${r.content} (ID: ${r.id})`,
+                },
+            ],
+        };
     });
     // ── cloudflare_update_dns_record ──────────────────────────────────────────
     server.registerTool("cloudflare_update_dns_record", {
@@ -100,7 +114,14 @@ Use cloudflare_list_dns_records first to get the record ID.`,
         if (!data.success)
             return { content: [{ type: "text", text: `❌ ${cfError(data)}` }] };
         const r = data.result;
-        return { content: [{ type: "text", text: `✅ Updated ${r.type} "${r.name}" → ${r.content}` }] };
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `✅ Updated ${r.type} "${r.name}" → ${r.content}`,
+                },
+            ],
+        };
     });
     // ── cloudflare_delete_dns_record ──────────────────────────────────────────
     server.registerTool("cloudflare_delete_dns_record", {
@@ -111,10 +132,14 @@ Use cloudflare_list_dns_records first to get the record ID.`,
         }),
         annotations: { readOnlyHint: false, destructiveHint: true },
     }, async ({ record_id }) => {
-        const data = (await cfFetch(`/dns_records/${record_id}`, { method: "DELETE" }));
+        const data = (await cfFetch(`/dns_records/${record_id}`, {
+            method: "DELETE",
+        }));
         if (!data.success)
             return { content: [{ type: "text", text: `❌ ${cfError(data)}` }] };
-        return { content: [{ type: "text", text: `✅ Deleted DNS record ${record_id}` }] };
+        return {
+            content: [{ type: "text", text: `✅ Deleted DNS record ${record_id}` }],
+        };
     });
     // ── cloudflare_purge_cache ────────────────────────────────────────────────
     server.registerTool("cloudflare_purge_cache", {
@@ -124,10 +149,20 @@ Use purge_everything=true to wipe all cached assets (use after major deploys).
 Or provide specific URLs to purge individual files.
 Note: purge_everything counts against rate limit — don't run in loops.`,
         inputSchema: z.object({
-            purge_everything: z.boolean().default(false).describe("Wipe entire zone cache"),
-            files: z.array(z.string()).optional().describe("Specific URLs to purge, e.g. ['https://cloudless.online/index.html']"),
+            purge_everything: z
+                .boolean()
+                .default(false)
+                .describe("Wipe entire zone cache"),
+            files: z
+                .array(z.string())
+                .optional()
+                .describe("Specific URLs to purge, e.g. ['https://cloudless.online/index.html']"),
         }),
-        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+        annotations: {
+            readOnlyHint: false,
+            destructiveHint: false,
+            idempotentHint: true,
+        },
     }, async ({ purge_everything, files }) => {
         const body = purge_everything ? { purge_everything: true } : { files };
         const data = (await cfFetch("/purge_cache", {
@@ -148,7 +183,13 @@ Note: purge_everything counts against rate limit — don't run in loops.`,
 Returns: requests, bandwidth, cached %, threats, unique visitors.
 Default: last 24 hours. Requires Zone Analytics:Read on the token.`,
         inputSchema: z.object({
-            since_hours: z.number().int().min(1).max(168).default(24).describe("Hours to look back (1–168)"),
+            since_hours: z
+                .number()
+                .int()
+                .min(1)
+                .max(168)
+                .default(24)
+                .describe("Hours to look back (1–168)"),
         }),
         annotations: { readOnlyHint: true, destructiveHint: false },
     }, async ({ since_hours }) => {
@@ -188,11 +229,25 @@ Default: last 24 hours. Requires Zone Analytics:Read on the token.`,
         });
         const data = (await res.json());
         if (data.errors?.length) {
-            return { content: [{ type: "text", text: `❌ GraphQL error: ${data.errors.map((e) => e.message).join(", ")}` }] };
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ GraphQL error: ${data.errors.map((e) => e.message).join(", ")}`,
+                    },
+                ],
+            };
         }
         const groups = data.data?.viewer.zones[0]?.httpRequests1hGroups ?? [];
         if (!groups.length) {
-            return { content: [{ type: "text", text: `No analytics data for the last ${since_hours}h (zone may have no traffic yet).` }] };
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `No analytics data for the last ${since_hours}h (zone may have no traffic yet).`,
+                    },
+                ],
+            };
         }
         // Aggregate across all hourly buckets
         const totals = groups.reduce((acc, g) => ({
@@ -203,7 +258,15 @@ Default: last 24 hours. Requires Zone Analytics:Read on the token.`,
             threats: acc.threats + g.sum.threats,
             pageViews: acc.pageViews + g.sum.pageViews,
             uniques: acc.uniques + g.uniq.uniques,
-        }), { requests: 0, cachedRequests: 0, bytes: 0, cachedBytes: 0, threats: 0, pageViews: 0, uniques: 0 });
+        }), {
+            requests: 0,
+            cachedRequests: 0,
+            bytes: 0,
+            cachedBytes: 0,
+            threats: 0,
+            pageViews: 0,
+            uniques: 0,
+        });
         const cachedPct = totals.requests > 0
             ? ((totals.cachedRequests / totals.requests) * 100).toFixed(1)
             : "0";
@@ -230,9 +293,19 @@ Useful for diagnosing TLS issues, checking caching mode, or verifying security p
         annotations: { readOnlyHint: true, destructiveHint: false },
     }, async () => {
         const KEYS = [
-            "ssl", "security_level", "min_tls_version", "tls_1_3",
-            "http2", "http3", "0rtt", "brotli", "always_use_https",
-            "hsts", "rocket_loader", "cache_level", "development_mode",
+            "ssl",
+            "security_level",
+            "min_tls_version",
+            "tls_1_3",
+            "http2",
+            "http3",
+            "0rtt",
+            "brotli",
+            "always_use_https",
+            "hsts",
+            "rocket_loader",
+            "cache_level",
+            "development_mode",
         ];
         const results = [];
         for (const key of KEYS) {
@@ -244,7 +317,14 @@ Useful for diagnosing TLS issues, checking caching mode, or verifying security p
                 results.push(`${key.padEnd(22)}  ${val}`);
             }
         }
-        return { content: [{ type: "text", text: `## cloudless.online zone settings\n\n${results.join("\n")}` }] };
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `## cloudless.online zone settings\n\n${results.join("\n")}`,
+                },
+            ],
+        };
     });
     // ── cloudflare_list_tokens ────────────────────────────────────────────────
     server.registerTool("cloudflare_list_tokens", {
@@ -258,7 +338,14 @@ Use this to audit tokens, find IDs for deletion, or check expiry.`,
     }, async () => {
         const data = (await cfApiFetch("/user/tokens"));
         if (!data.success)
-            return { content: [{ type: "text", text: `❌ ${cfError(data)}\n\nNote: Requires "User API Tokens:Read" permission on the token.` }] };
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ ${cfError(data)}\n\nNote: Requires "User API Tokens:Read" permission on the token.`,
+                    },
+                ],
+            };
         if (!data.result.length)
             return { content: [{ type: "text", text: "No tokens found." }] };
         const rows = data.result.map((t) => [
@@ -269,7 +356,14 @@ Use this to audit tokens, find IDs for deletion, or check expiry.`,
             `Expires: ${t.expires_on ?? "never"}`,
             `Last use: ${t.last_used_on ?? "never"}`,
         ].join("\n"));
-        return { content: [{ type: "text", text: `## API Tokens (${data.result.length})\n\n${rows.join("\n\n---\n\n")}` }] };
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `## API Tokens (${data.result.length})\n\n${rows.join("\n\n---\n\n")}`,
+                },
+            ],
+        };
     });
     // ── cloudflare_list_permission_groups ─────────────────────────────────────
     server.registerTool("cloudflare_list_permission_groups", {
@@ -278,7 +372,10 @@ Use this to audit tokens, find IDs for deletion, or check expiry.`,
 Use this to find the correct permission_group IDs before calling cloudflare_create_token.
 Filter by scope: "zone", "account", "user", or omit for all.`,
         inputSchema: z.object({
-            filter: z.string().optional().describe('Optional text filter, e.g. "analytics" or "dns"'),
+            filter: z
+                .string()
+                .optional()
+                .describe('Optional text filter, e.g. "analytics" or "dns"'),
         }),
         annotations: { readOnlyHint: true, destructiveHint: false },
     }, async ({ filter }) => {
@@ -291,7 +388,14 @@ Filter by scope: "zone", "account", "user", or omit for all.`,
             groups = groups.filter((g) => g.name.toLowerCase().includes(f));
         }
         const rows = groups.map((g) => `${g.id}  ${g.name.padEnd(45)}  [${g.scopes.join(", ")}]`);
-        return { content: [{ type: "text", text: `## Permission Groups (${groups.length})\n\n${rows.join("\n")}` }] };
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `## Permission Groups (${groups.length})\n\n${rows.join("\n")}`,
+                },
+            ],
+        };
     });
     // ── cloudflare_create_token ───────────────────────────────────────────────
     server.registerTool("cloudflare_create_token", {
@@ -315,12 +419,17 @@ Zone resource key format: "com.cloudflare.api.account.zone.<ZONE_ID>"
 Account resource: "com.cloudflare.api.account.<ACCOUNT_ID>"`,
         inputSchema: z.object({
             name: z.string().describe("Token name, e.g. 'cloudflare-geo-exporter'"),
-            policies: z.array(z.object({
+            policies: z
+                .array(z.object({
                 effect: z.enum(["allow", "deny"]).default("allow"),
                 resources: z.record(z.string()),
                 permission_groups: z.array(z.object({ id: z.string(), name: z.string().optional() })),
-            })).describe("Array of policy objects"),
-            expires_on: z.string().optional().describe("ISO 8601 expiry, e.g. '2027-01-01T00:00:00Z'"),
+            }))
+                .describe("Array of policy objects"),
+            expires_on: z
+                .string()
+                .optional()
+                .describe("ISO 8601 expiry, e.g. '2027-01-01T00:00:00Z'"),
         }),
         annotations: { readOnlyHint: false, destructiveHint: false },
     }, async ({ name, policies, expires_on }) => {
@@ -332,16 +441,27 @@ Account resource: "com.cloudflare.api.account.<ACCOUNT_ID>"`,
             body: JSON.stringify(body),
         }));
         if (!data.success)
-            return { content: [{ type: "text", text: `❌ ${cfError(data)}\n\nNote: Requires "User API Tokens:Edit" permission.` }] };
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `❌ ${cfError(data)}\n\nNote: Requires "User API Tokens:Edit" permission.`,
+                    },
+                ],
+            };
         const r = data.result;
         const lines = [
             `✅ Token created successfully`,
             `Name:   ${r.name}`,
             `ID:     ${r.id}`,
             `Status: ${r.status}`,
-            r.value ? `\n⚠️  Token value (save this — shown only once):\n${r.value}` : "",
+            r.value
+                ? `\n⚠️  Token value (save this — shown only once):\n${r.value}`
+                : "",
         ];
-        return { content: [{ type: "text", text: lines.filter(Boolean).join("\n") }] };
+        return {
+            content: [{ type: "text", text: lines.filter(Boolean).join("\n") }],
+        };
     });
     // ── cloudflare_delete_token ───────────────────────────────────────────────
     server.registerTool("cloudflare_delete_token", {
@@ -354,10 +474,14 @@ Requires "User API Tokens:Edit" permission.`,
         }),
         annotations: { readOnlyHint: false, destructiveHint: true },
     }, async ({ token_id }) => {
-        const data = (await cfApiFetch(`/user/tokens/${token_id}`, { method: "DELETE" }));
+        const data = (await cfApiFetch(`/user/tokens/${token_id}`, {
+            method: "DELETE",
+        }));
         if (!data.success)
             return { content: [{ type: "text", text: `❌ ${cfError(data)}` }] };
-        return { content: [{ type: "text", text: `✅ Deleted token ${token_id}` }] };
+        return {
+            content: [{ type: "text", text: `✅ Deleted token ${token_id}` }],
+        };
     });
     // ── cloudflare_worker_routes ──────────────────────────────────────────────
     server.registerTool("cloudflare_worker_routes", {
@@ -372,9 +496,18 @@ Useful for verifying cloudless-edge Worker is wired to the correct paths.`,
         if (!data.success)
             return { content: [{ type: "text", text: `❌ ${cfError(data)}` }] };
         if (!data.result.length)
-            return { content: [{ type: "text", text: "No Worker routes configured." }] };
+            return {
+                content: [{ type: "text", text: "No Worker routes configured." }],
+            };
         const rows = data.result.map((r) => `${r.id}  ${r.pattern.padEnd(50)}  → ${r.script ?? "(none)"}`);
-        return { content: [{ type: "text", text: `## Worker Routes (${data.result.length})\n\n${rows.join("\n")}` }] };
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `## Worker Routes (${data.result.length})\n\n${rows.join("\n")}`,
+                },
+            ],
+        };
     });
     // ── cloudflare_tunnel_status ──────────────────────────────────────────────
     server.registerTool("cloudflare_tunnel_status", {
@@ -391,7 +524,9 @@ Returns systemd status + recent log lines + active connections.`,
             ` && echo '=== Recent logs ===' && journalctl -u cloudflared -n ${tail} --no-pager` +
             ` && echo '=== Active connections ===' && journalctl -u cloudflared --since "5 minutes ago" --no-pager | grep -E 'Registered|connection|ERR|err' | tail -10 || true`;
         const r = await runOnNode("omv-main", cmd);
-        const text = r.error ? `❌ SSH error: ${r.error}` : "```\n" + r.stdout + "\n```";
+        const text = r.error
+            ? `❌ SSH error: ${r.error}`
+            : "```\n" + r.stdout + "\n```";
         return { content: [{ type: "text", text }] };
     });
     // ── cloudflare_check_certs ────────────────────────────────────────────────
@@ -409,7 +544,9 @@ Current certs: cloudless-online-tls, auth-cloudless-online-tls.`,
             ` && echo '=== Orders ===' && ${KUBECTL} get orders -A 2>/dev/null || true` +
             ` && echo '=== cert-manager logs (last 20) ===' && ${KUBECTL} logs -n cert-manager -l app=cert-manager --tail=20 2>&1`;
         const r = await runOnNode("omv-main", cmd);
-        const text = r.error ? `❌ SSH error: ${r.error}` : "```\n" + r.stdout + "\n```";
+        const text = r.error
+            ? `❌ SSH error: ${r.error}`
+            : "```\n" + r.stdout + "\n```";
         return { content: [{ type: "text", text }] };
     });
     // ── cloudflare_restart_tunnel ─────────────────────────────────────────────
@@ -417,7 +554,11 @@ Current certs: cloudless-online-tls, auth-cloudless-online-tls.`,
         title: "Restart Cloudflare Tunnel",
         description: `Restart cloudflared on omv-main. Use when tunnel is stuck or connections drop.`,
         inputSchema: z.object({}),
-        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+        annotations: {
+            readOnlyHint: false,
+            destructiveHint: false,
+            idempotentHint: true,
+        },
     }, async () => {
         const cmd = `sudo systemctl restart cloudflared && sleep 3 && systemctl is-active cloudflared`;
         const r = await runOnNode("omv-main", cmd);
