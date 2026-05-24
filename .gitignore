@@ -8,3 +8,4 @@ terraform.tfvars
 .terraform.lock.hcl
 crash.log
 *.log
+.tmp_*.b64

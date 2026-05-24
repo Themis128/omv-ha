@@ -58,8 +58,7 @@ Returns pod names, namespace, status, restart count, and age.`,
       const nsFlag = namespace ? `-n ${namespace}` : "-A";
       let cmd = `${KUBECTL} get pods ${nsFlag} -o wide`;
       if (show_events) {
-        cmd +=
-          ` && echo '=== Recent Events ===' && ${KUBECTL} get events ${nsFlag} --sort-by='.lastTimestamp' | tail -20`;
+        cmd += ` && echo '=== Recent Events ===' && ${KUBECTL} get events ${nsFlag} --sort-by='.lastTimestamp' | tail -20`;
       }
       const r = await runOnNode(K3S_NODE, cmd);
       const text = r.error ? `❌ ${r.error}` : "```\n" + r.stdout + "\n```";
@@ -139,7 +138,11 @@ Returns the rollout status after restart.`,
         namespace: z.string().describe("Kubernetes namespace"),
         deployment: z.string().describe("Deployment name to restart"),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
     },
     async ({ namespace, deployment }) => {
       const cmd =
@@ -232,7 +235,11 @@ Use before triggering a kubectl rollout to eliminate pull-time from the rollout 
           .default("us-east-1")
           .describe("AWS region for ECR login token"),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
     },
     async ({ image, aws_region }) => {
       // Get ECR login token from the node itself (it has pi-standby-aws-creds)
@@ -250,7 +257,9 @@ Use before triggering a kubectl rollout to eliminate pull-time from the rollout 
       ].join("\n");
 
       const r = await runOnNode(K3S_NODE, cmd);
-      const text = r.error ? `❌ SSH error: ${r.error}` : "```\n" + r.stdout + "\n```";
+      const text = r.error
+        ? `❌ SSH error: ${r.error}`
+        : "```\n" + r.stdout + "\n```";
       return { content: [{ type: "text", text }] };
     },
   );
