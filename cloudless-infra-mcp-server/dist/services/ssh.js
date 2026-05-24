@@ -35,7 +35,9 @@ export async function runOnNode(node, command) {
             privateKey: resolvePrivateKey(cfg.privateKeyPath),
             readyTimeout: 10_000,
         });
-        const result = await ssh.execCommand(command, { execOptions: { pty: false } });
+        const result = await ssh.execCommand(command, {
+            execOptions: { pty: false },
+        });
         return {
             stdout: result.stdout,
             stderr: result.stderr,
@@ -61,10 +63,18 @@ export async function runOnBothNodes(command) {
     return {
         "omv-ha": haResult.status === "fulfilled"
             ? haResult.value
-            : { stdout: "", stderr: haResult.reason?.message ?? "Failed", code: 1 },
+            : {
+                stdout: "",
+                stderr: haResult.reason?.message ?? "Failed",
+                code: 1,
+            },
         "omv-main": mainResult.status === "fulfilled"
             ? mainResult.value
-            : { stdout: "", stderr: mainResult.reason?.message ?? "Failed", code: 1 },
+            : {
+                stdout: "",
+                stderr: mainResult.reason?.message ?? "Failed",
+                code: 1,
+            },
     };
 }
 /**
@@ -94,6 +104,8 @@ export async function uploadFile(node, localPath, remotePath) {
 }
 /** Human-friendly label for a node */
 export function nodeLabel(node) {
-    return node === "omv-ha" ? "OMV-HA (192.168.1.130)" : "OMV main / Pi 5 (192.168.1.128)";
+    return node === "omv-ha"
+        ? "OMV-HA (192.168.1.130)"
+        : "OMV main / Pi 5 (192.168.1.128)";
 }
 //# sourceMappingURL=ssh.js.map
