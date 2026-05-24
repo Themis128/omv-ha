@@ -142,8 +142,9 @@ Run after CDN config changes or to baseline response performance.`,
         const url = APPS[key];
         // Use GET (not HEAD) so content-encoding is actually returned.
         // Discard the body (-o /dev/null) but dump response headers (-D -).
+        // -L follows the locale redirect (e.g. /→/en) so content-encoding is from the real page
         const cmd =
-          `curl -s --max-time 15 --compressed -o /dev/null -D - ` +
+          `curl -sL --max-time 15 --compressed -o /dev/null -D - ` +
           `-w '\\nTTFB: %{time_starttransfer}s | Total: %{time_total}s | Size: %{size_download}B' ` +
           `'${url}'`;
 
@@ -239,10 +240,10 @@ This is the entry point for a full app audit — use it first, then drill into s
         // TTFB
         runOnNode("omv-main", `curl -so /dev/null --max-time 10 -w '%{time_starttransfer}' '${APPS.cloudless}'`),
         runOnNode("omv-main", `curl -so /dev/null --max-time 10 -w '%{time_starttransfer}' '${APPS.manager}'`),
-        // Compression check — GET (not HEAD): a HEAD response has no body, so
-        // content-encoding is often absent and would read as a false negative.
-        runOnNode("omv-main", `curl -s -o /dev/null -D - --max-time 10 --compressed '${APPS.cloudless}' | grep -i 'content-encoding'`),
-        runOnNode("omv-main", `curl -s -o /dev/null -D - --max-time 10 --compressed '${APPS.manager}' | grep -i 'content-encoding'`),
+        // Compression check — GET with -L (follow locale redirect /→/en) so content-encoding
+        // is from the actual page, not a 301 redirect response.
+        runOnNode("omv-main", `curl -sL -o /dev/null -D - --max-time 10 --compressed '${APPS.cloudless}' | grep -i 'content-encoding'`),
+        runOnNode("omv-main", `curl -sL -o /dev/null -D - --max-time 10 --compressed '${APPS.manager}' | grep -i 'content-encoding'`),
       ]);
 
       const [clH, mgH, clTTFB, mgTTFB, clEnc, mgEnc] = checks;
