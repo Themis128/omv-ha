@@ -100,6 +100,13 @@ alertmanager:
           group_wait: 30s
           group_interval: 3m
           repeat_interval: 2h
+        # alert-api: warnings + criticals → MQTT LED display + Slack (continue fan-out to oncall)
+        - receiver: "alert-api"
+          matchers: [severity =~ "warning|critical"]
+          continue: true
+          group_wait: 10s
+          group_interval: 2m
+          repeat_interval: 4h
     receivers:
       - name: "null"
       # ntfy self-hosted push relay — criticals only, continue:true fans out to oncall-webhook too
@@ -119,6 +126,12 @@ alertmanager:
           - url: "http://oncall-engine.oncall.svc.cluster.local:8080/integrations/v1/alertmanager/aed2bf7d35817a5e8f27306c35d3/"
             send_resolved: true
             max_alerts: 50
+      # alert-api: drives MQTT LED display + Slack notifications
+      - name: "alert-api"
+        webhook_configs:
+          - url: "http://alert-api.alert-manager.svc.cluster.local:8080/api/alertmanager/webhook"
+            send_resolved: true
+            max_alerts: 20
   alertmanagerSpec:
     replicas: 1
     nodeSelector:

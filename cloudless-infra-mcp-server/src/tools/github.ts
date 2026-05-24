@@ -19,12 +19,18 @@ type RepoAlias = keyof typeof GH_REPOS;
 
 /** Run a gh CLI command on Windows and return parsed JSON or raw text. */
 async function ghJson<T>(args: string[]): Promise<T> {
-  const { stdout } = await execFileAsync("gh", args, { encoding: "utf8", timeout: 30_000 });
+  const { stdout } = await execFileAsync("gh", args, {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
   return JSON.parse(stdout) as T;
 }
 
 async function ghRaw(args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("gh", args, { encoding: "utf8", timeout: 30_000 });
+  const { stdout } = await execFileAsync("gh", args, {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
   return stdout.trim();
 }
 
@@ -53,13 +59,27 @@ Use to verify a runner is online before triggering a workflow.`,
     async ({ repo }) => {
       const fullRepo = resolveRepo(repo);
       try {
-        const data = await ghJson<{ total_count: number; runners: Array<{
-          id: number; name: string; os: string; status: string; busy: boolean;
-          labels: Array<{ name: string }>;
-        }> }>(["api", `repos/${fullRepo}/actions/runners`]);
+        const data = await ghJson<{
+          total_count: number;
+          runners: Array<{
+            id: number;
+            name: string;
+            os: string;
+            status: string;
+            busy: boolean;
+            labels: Array<{ name: string }>;
+          }>;
+        }>(["api", `repos/${fullRepo}/actions/runners`]);
 
         if (data.total_count === 0) {
-          return { content: [{ type: "text", text: `⚠️ No self-hosted runners registered to **${fullRepo}**.\nUse \`gh_runner_register\` to add one.` }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: `⚠️ No self-hosted runners registered to **${fullRepo}**.\nUse \`gh_runner_register\` to add one.`,
+              },
+            ],
+          };
         }
 
         const lines = data.runners.map((r) => {
@@ -70,13 +90,22 @@ Use to verify a runner is online before triggering a workflow.`,
         });
 
         return {
-          content: [{
-            type: "text",
-            text: `## Runners for ${fullRepo} (${data.total_count})\n\n${lines.join("\n")}`,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `## Runners for ${fullRepo} (${data.total_count})\n\n${lines.join("\n")}`,
+            },
+          ],
         };
       } catch (err) {
-        return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+        };
       }
     },
   );
@@ -104,19 +133,43 @@ a systemd service. Idempotent — skips if already registered.`,
 
       // Check if already registered
       try {
-        const data = await ghJson<{ total_count: number }>(["api", `repos/${fullRepo}/actions/runners`]);
+        const data = await ghJson<{ total_count: number }>([
+          "api",
+          `repos/${fullRepo}/actions/runners`,
+        ]);
         if (data.total_count > 0) {
-          return { content: [{ type: "text", text: `ℹ️ Runner already registered to **${fullRepo}**. Use \`gh_runner_list\` to check status.` }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: `ℹ️ Runner already registered to **${fullRepo}**. Use \`gh_runner_list\` to check status.`,
+              },
+            ],
+          };
         }
-      } catch (_) { /* proceed */ }
+      } catch (_) {
+        /* proceed */
+      }
 
       // Generate registration token
       let token: string;
       try {
-        const resp = await ghJson<{ token: string }>(["api", "-X", "POST", `repos/${fullRepo}/actions/runners/registration-token`]);
+        const resp = await ghJson<{ token: string }>([
+          "api",
+          "-X",
+          "POST",
+          `repos/${fullRepo}/actions/runners/registration-token`,
+        ]);
         token = resp.token;
       } catch (err) {
-        return { content: [{ type: "text", text: `❌ Failed to get registration token: ${err instanceof Error ? err.message : String(err)}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ Failed to get registration token: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+        };
       }
 
       // SSH: create dir, extract tarball, configure, install service
@@ -136,13 +189,17 @@ a systemd service. Idempotent — skips if already registered.`,
 
       const r = await runOnNode("omv-main", cmd);
       const ok = r.code === 0;
-      const status = ok ? "✅ Runner registered and running" : "❌ Registration failed";
+      const status = ok
+        ? "✅ Runner registered and running"
+        : "❌ Registration failed";
 
       return {
-        content: [{
-          type: "text",
-          text: `## ${status}\n\n**Repo:** ${fullRepo}\n**Dir:** ${runnerDir}\n**Service:** ${serviceUnit}\n\n\`\`\`\n${r.stdout || r.stderr}\n\`\`\``,
-        }],
+        content: [
+          {
+            type: "text",
+            text: `## ${status}\n\n**Repo:** ${fullRepo}\n**Dir:** ${runnerDir}\n**Service:** ${serviceUnit}\n\n\`\`\`\n${r.stdout || r.stderr}\n\`\`\``,
+          },
+        ],
       };
     },
   );
@@ -171,22 +228,63 @@ Use to manually kick off a CI/CD pipeline (e.g., deploy-pi.yml, deploy.yml).`,
     async ({ repo, workflow, ref }) => {
       const fullRepo = resolveRepo(repo);
       try {
-        await ghRaw(["workflow", "run", workflow, "--repo", fullRepo, "--ref", ref]);
+        await ghRaw([
+          "workflow",
+          "run",
+          workflow,
+          "--repo",
+          fullRepo,
+          "--ref",
+          ref,
+        ]);
         // Wait briefly then fetch the new run ID
         await new Promise((r) => setTimeout(r, 3000));
-        const raw = await ghRaw(["run", "list", "--repo", fullRepo, "--workflow", workflow, "--limit", "1", "--json", "databaseId,status,displayTitle,createdAt"]);
-        const runs = JSON.parse(raw) as Array<{ databaseId: number; status: string; displayTitle: string; createdAt: string }>;
+        const raw = await ghRaw([
+          "run",
+          "list",
+          "--repo",
+          fullRepo,
+          "--workflow",
+          workflow,
+          "--limit",
+          "1",
+          "--json",
+          "databaseId,status,displayTitle,createdAt",
+        ]);
+        const runs = JSON.parse(raw) as Array<{
+          databaseId: number;
+          status: string;
+          displayTitle: string;
+          createdAt: string;
+        }>;
         const run = runs[0];
-        if (!run) return { content: [{ type: "text", text: `✅ Workflow \`${workflow}\` triggered on **${fullRepo}**. Run ID not yet available — use \`gh_workflow_watch\` in a moment.` }] };
+        if (!run)
+          return {
+            content: [
+              {
+                type: "text",
+                text: `✅ Workflow \`${workflow}\` triggered on **${fullRepo}**. Run ID not yet available — use \`gh_workflow_watch\` in a moment.`,
+              },
+            ],
+          };
 
         return {
-          content: [{
-            type: "text",
-            text: `✅ Triggered \`${workflow}\` on **${fullRepo}**\n\n**Run ID:** ${run.databaseId}\n**Status:** ${run.status}\n**Title:** ${run.displayTitle}\n**Started:** ${run.createdAt}\n\nUse \`gh_workflow_watch\` with run_id \`${run.databaseId}\` to follow progress.`,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `✅ Triggered \`${workflow}\` on **${fullRepo}**\n\n**Run ID:** ${run.databaseId}\n**Status:** ${run.status}\n**Title:** ${run.displayTitle}\n**Started:** ${run.createdAt}\n\nUse \`gh_workflow_watch\` with run_id \`${run.databaseId}\` to follow progress.`,
+            },
+          ],
         };
       } catch (err) {
-        return { content: [{ type: "text", text: `❌ Error triggering workflow: ${err instanceof Error ? err.message : String(err)}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ Error triggering workflow: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+        };
       }
     },
   );
@@ -206,7 +304,9 @@ Use after gh_workflow_trigger to follow a CI/CD pipeline to completion.`,
           .describe("Repo alias."),
         run_id: z
           .number()
-          .describe("Workflow run ID (from gh_workflow_trigger or gh run list)."),
+          .describe(
+            "Workflow run ID (from gh_workflow_trigger or gh run list).",
+          ),
         timeout_minutes: z
           .number()
           .default(15)
@@ -219,18 +319,45 @@ Use after gh_workflow_trigger to follow a CI/CD pipeline to completion.`,
       const deadline = Date.now() + timeout_minutes * 60 * 1000;
       const pollMs = 20_000;
 
-      const formatJobs = (jobs: Array<{
-        name: string; status: string; conclusion: string;
-        steps: Array<{ name: string; status: string; conclusion: string; number: number }>;
-      }>) =>
-        jobs.map((j) => {
-          const jIcon = j.conclusion === "success" ? "✅" : j.conclusion === "failure" ? "❌" : j.status === "in_progress" ? "⏳" : "⏸";
-          const steps = j.steps.map((s) => {
-            const sIcon = s.conclusion === "success" ? "✓" : s.conclusion === "failure" ? "✗" : s.status === "in_progress" ? "▶" : "·";
-            return `    ${sIcon} ${s.name}`;
-          }).join("\n");
-          return `${jIcon} **${j.name}** (${j.status}${j.conclusion ? " / " + j.conclusion : ""})\n${steps}`;
-        }).join("\n\n");
+      const formatJobs = (
+        jobs: Array<{
+          name: string;
+          status: string;
+          conclusion: string;
+          steps: Array<{
+            name: string;
+            status: string;
+            conclusion: string;
+            number: number;
+          }>;
+        }>,
+      ) =>
+        jobs
+          .map((j) => {
+            const jIcon =
+              j.conclusion === "success"
+                ? "✅"
+                : j.conclusion === "failure"
+                  ? "❌"
+                  : j.status === "in_progress"
+                    ? "⏳"
+                    : "⏸";
+            const steps = j.steps
+              .map((s) => {
+                const sIcon =
+                  s.conclusion === "success"
+                    ? "✓"
+                    : s.conclusion === "failure"
+                      ? "✗"
+                      : s.status === "in_progress"
+                        ? "▶"
+                        : "·";
+                return `    ${sIcon} ${s.name}`;
+              })
+              .join("\n");
+            return `${jIcon} **${j.name}** (${j.status}${j.conclusion ? " / " + j.conclusion : ""})\n${steps}`;
+          })
+          .join("\n\n");
 
       while (Date.now() < deadline) {
         try {
@@ -238,33 +365,59 @@ Use after gh_workflow_trigger to follow a CI/CD pipeline to completion.`,
             status: string;
             conclusion: string;
             jobs: Array<{
-              name: string; status: string; conclusion: string;
-              steps: Array<{ name: string; status: string; conclusion: string; number: number }>;
+              name: string;
+              status: string;
+              conclusion: string;
+              steps: Array<{
+                name: string;
+                status: string;
+                conclusion: string;
+                number: number;
+              }>;
             }>;
-          }>(["run", "view", String(run_id), "--repo", fullRepo, "--json", "status,conclusion,jobs"]);
+          }>([
+            "run",
+            "view",
+            String(run_id),
+            "--repo",
+            fullRepo,
+            "--json",
+            "status,conclusion,jobs",
+          ]);
 
           if (data.status === "completed") {
             const icon = data.conclusion === "success" ? "✅" : "❌";
             return {
-              content: [{
-                type: "text",
-                text: `## ${icon} Run ${run_id} — ${data.conclusion.toUpperCase()}\n\n${formatJobs(data.jobs)}\n\nView: https://github.com/${fullRepo}/actions/runs/${run_id}`,
-              }],
+              content: [
+                {
+                  type: "text",
+                  text: `## ${icon} Run ${run_id} — ${data.conclusion.toUpperCase()}\n\n${formatJobs(data.jobs)}\n\nView: https://github.com/${fullRepo}/actions/runs/${run_id}`,
+                },
+              ],
             };
           }
 
           // Still running — wait and poll again
           await new Promise((r) => setTimeout(r, pollMs));
         } catch (err) {
-          return { content: [{ type: "text", text: `❌ Error polling run: ${err instanceof Error ? err.message : String(err)}` }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: `❌ Error polling run: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
+          };
         }
       }
 
       return {
-        content: [{
-          type: "text",
-          text: `⏱️ Timeout after ${timeout_minutes} min — run ${run_id} is still in progress.\nView: https://github.com/${fullRepo}/actions/runs/${run_id}`,
-        }],
+        content: [
+          {
+            type: "text",
+            text: `⏱️ Timeout after ${timeout_minutes} min — run ${run_id} is still in progress.\nView: https://github.com/${fullRepo}/actions/runs/${run_id}`,
+          },
+        ],
       };
     },
   );
@@ -287,39 +440,85 @@ Useful for a quick CI health check without needing a specific run ID.`,
         workflow: z
           .string()
           .optional()
-          .describe('Filter by workflow filename (e.g., "deploy-pi.yml"). Omit for all.'),
+          .describe(
+            'Filter by workflow filename (e.g., "deploy-pi.yml"). Omit for all.',
+          ),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
     async ({ repo, limit, workflow }) => {
       const fullRepo = resolveRepo(repo);
-      const args = ["run", "list", "--repo", fullRepo, "--limit", String(limit), "--json", "databaseId,displayTitle,workflowName,status,conclusion,createdAt,headBranch"];
+      const args = [
+        "run",
+        "list",
+        "--repo",
+        fullRepo,
+        "--limit",
+        String(limit),
+        "--json",
+        "databaseId,displayTitle,workflowName,status,conclusion,createdAt,headBranch",
+      ];
       if (workflow) args.push("--workflow", workflow);
 
       try {
-        const runs = await ghJson<Array<{
-          databaseId: number; displayTitle: string; workflowName: string;
-          status: string; conclusion: string; createdAt: string; headBranch: string;
-        }>>(args);
+        const runs = await ghJson<
+          Array<{
+            databaseId: number;
+            displayTitle: string;
+            workflowName: string;
+            status: string;
+            conclusion: string;
+            createdAt: string;
+            headBranch: string;
+          }>
+        >(args);
 
         if (runs.length === 0) {
-          return { content: [{ type: "text", text: `No workflow runs found for **${fullRepo}**.` }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: `No workflow runs found for **${fullRepo}**.`,
+              },
+            ],
+          };
         }
 
         const lines = runs.map((r) => {
-          const icon = r.conclusion === "success" ? "✅" : r.conclusion === "failure" ? "❌" : r.status === "in_progress" ? "⏳" : r.status === "queued" ? "⏸" : "·";
-          const ts = new Date(r.createdAt).toISOString().slice(0, 16).replace("T", " ");
+          const icon =
+            r.conclusion === "success"
+              ? "✅"
+              : r.conclusion === "failure"
+                ? "❌"
+                : r.status === "in_progress"
+                  ? "⏳"
+                  : r.status === "queued"
+                    ? "⏸"
+                    : "·";
+          const ts = new Date(r.createdAt)
+            .toISOString()
+            .slice(0, 16)
+            .replace("T", " ");
           return `${icon} \`${r.databaseId}\` **${r.workflowName}** — ${r.conclusion || r.status} | ${r.headBranch} | ${ts} | ${r.displayTitle}`;
         });
 
         return {
-          content: [{
-            type: "text",
-            text: `## Recent runs — ${fullRepo}\n\n${lines.join("\n")}`,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `## Recent runs — ${fullRepo}\n\n${lines.join("\n")}`,
+            },
+          ],
         };
       } catch (err) {
-        return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+        };
       }
     },
   );
@@ -349,21 +548,45 @@ Returns a HEALTHY / DEGRADED / CRITICAL verdict.`,
       const fullRepo = resolveRepo(repo);
       try {
         // 1. Runner fleet
-        const runnersData = await ghJson<{ total_count: number; runners: Array<{
-          id: number; name: string; os: string; status: string; busy: boolean;
-          labels: Array<{ name: string }>;
-        }> }>(["api", `repos/${fullRepo}/actions/runners`]);
+        const runnersData = await ghJson<{
+          total_count: number;
+          runners: Array<{
+            id: number;
+            name: string;
+            os: string;
+            status: string;
+            busy: boolean;
+            labels: Array<{ name: string }>;
+          }>;
+        }>(["api", `repos/${fullRepo}/actions/runners`]);
 
         // 2. Queue depth — recent runs
-        const runs = await ghJson<Array<{
-          databaseId: number; status: string; conclusion: string; workflowName: string;
-        }>>(["run", "list", "--repo", fullRepo, "--limit", "60", "--json",
-          "databaseId,status,conclusion,workflowName"]);
+        const runs = await ghJson<
+          Array<{
+            databaseId: number;
+            status: string;
+            conclusion: string;
+            workflowName: string;
+          }>
+        >([
+          "run",
+          "list",
+          "--repo",
+          fullRepo,
+          "--limit",
+          "60",
+          "--json",
+          "databaseId,status,conclusion,workflowName",
+        ]);
         const queued = runs.filter((r) => r.status === "queued").length;
-        const inProgress = runs.filter((r) => r.status === "in_progress").length;
+        const inProgress = runs.filter(
+          (r) => r.status === "in_progress",
+        ).length;
 
         const online = runnersData.runners.filter((r) => r.status === "online");
-        const offline = runnersData.runners.filter((r) => r.status !== "online");
+        const offline = runnersData.runners.filter(
+          (r) => r.status !== "online",
+        );
         const busy = online.filter((r) => r.busy);
 
         // 3. Zombie detection — runners report busy but nothing is in_progress
@@ -372,18 +595,33 @@ Returns a HEALTHY / DEGRADED / CRITICAL verdict.`,
         // 4. Billing-lock probe — most recent failed run with a 0-step job that
         //    failed in <15s is the signature of an account billing lock.
         let billingLock = false;
-        const lastFail = runs.find((r) => r.status === "completed" && r.conclusion === "failure");
+        const lastFail = runs.find(
+          (r) => r.status === "completed" && r.conclusion === "failure",
+        );
         if (lastFail) {
           try {
-            const jobsResp = await ghJson<{ jobs: Array<{
-              started_at: string; completed_at: string; steps: unknown[]; conclusion: string;
-            }> }>(["api", `repos/${fullRepo}/actions/runs/${lastFail.databaseId}/jobs`]);
+            const jobsResp = await ghJson<{
+              jobs: Array<{
+                started_at: string;
+                completed_at: string;
+                steps: unknown[];
+                conclusion: string;
+              }>;
+            }>([
+              "api",
+              `repos/${fullRepo}/actions/runs/${lastFail.databaseId}/jobs`,
+            ]);
             billingLock = jobsResp.jobs.some((j) => {
-              if (j.conclusion !== "failure" || (j.steps?.length ?? 0) > 0) return false;
-              const dt = new Date(j.completed_at).getTime() - new Date(j.started_at).getTime();
+              if (j.conclusion !== "failure" || (j.steps?.length ?? 0) > 0)
+                return false;
+              const dt =
+                new Date(j.completed_at).getTime() -
+                new Date(j.started_at).getTime();
               return dt >= 0 && dt < 15_000;
             });
-          } catch (_) { /* probe is best-effort */ }
+          } catch (_) {
+            /* probe is best-effort */
+          }
         }
 
         // Verdict
@@ -391,8 +629,10 @@ Returns a HEALTHY / DEGRADED / CRITICAL verdict.`,
         const issues: string[] = [];
         if (billingLock) {
           verdict = "CRITICAL";
-          issues.push("Billing lock — GitHub-hosted runners disabled account-wide. " +
-            "Resolve at github.com/settings/billing. Self-hosted runners still work.");
+          issues.push(
+            "Billing lock — GitHub-hosted runners disabled account-wide. " +
+              "Resolve at github.com/settings/billing. Self-hosted runners still work.",
+          );
         }
         if (online.length === 0 && runnersData.total_count > 0) {
           verdict = "CRITICAL";
@@ -400,42 +640,61 @@ Returns a HEALTHY / DEGRADED / CRITICAL verdict.`,
         }
         if (zombie) {
           if (verdict !== "CRITICAL") verdict = "DEGRADED";
-          issues.push(`Zombie runner(s): ${busy.length} report busy but 0 jobs in_progress ` +
-            `with ${queued} queued. Re-register the affected runner(s).`);
+          issues.push(
+            `Zombie runner(s): ${busy.length} report busy but 0 jobs in_progress ` +
+              `with ${queued} queued. Re-register the affected runner(s).`,
+          );
         }
         if (offline.length > 0 && online.length > 0) {
           if (verdict === "HEALTHY") verdict = "DEGRADED";
-          issues.push(`${offline.length} runner(s) offline: ${offline.map((r) => r.name).join(", ")}.`);
+          issues.push(
+            `${offline.length} runner(s) offline: ${offline.map((r) => r.name).join(", ")}.`,
+          );
         }
         if (online.length > 0 && queued > online.length * 4) {
           if (verdict === "HEALTHY") verdict = "DEGRADED";
-          issues.push(`Deep backlog: ${queued} queued across ${online.length} online runner(s).`);
+          issues.push(
+            `Deep backlog: ${queued} queued across ${online.length} online runner(s).`,
+          );
         }
 
-        const runnerLines = runnersData.runners.length === 0
-          ? ["(no self-hosted runners registered)"]
-          : runnersData.runners.map((r) => {
-            const icon = r.status === "online" ? "🟢" : "🔴";
-            const b = r.busy ? " [BUSY]" : " [idle]";
-            return `${icon} **${r.name}**${b} — ${r.labels.map((l) => l.name).join(", ")}`;
-          });
+        const runnerLines =
+          runnersData.runners.length === 0
+            ? ["(no self-hosted runners registered)"]
+            : runnersData.runners.map((r) => {
+                const icon = r.status === "online" ? "🟢" : "🔴";
+                const b = r.busy ? " [BUSY]" : " [idle]";
+                return `${icon} **${r.name}**${b} — ${r.labels.map((l) => l.name).join(", ")}`;
+              });
 
-        const icon = verdict === "HEALTHY" ? "✅" : verdict === "DEGRADED" ? "⚠️" : "🛑";
-        const issueText = issues.length > 0
-          ? `\n\n**Issues:**\n${issues.map((i) => `  - ${i}`).join("\n")}`
-          : "";
+        const icon =
+          verdict === "HEALTHY" ? "✅" : verdict === "DEGRADED" ? "⚠️" : "🛑";
+        const issueText =
+          issues.length > 0
+            ? `\n\n**Issues:**\n${issues.map((i) => `  - ${i}`).join("\n")}`
+            : "";
 
         return {
-          content: [{
-            type: "text",
-            text: `## ${icon} RUNNER FLEET: ${verdict} — ${fullRepo}\n\n` +
-              `**Runners (${runnersData.total_count}):**\n${runnerLines.join("\n")}\n\n` +
-              `**Queue:** ${queued} queued · ${inProgress} in-progress · ${online.length} online runner(s)` +
-              issueText,
-          }],
+          content: [
+            {
+              type: "text",
+              text:
+                `## ${icon} RUNNER FLEET: ${verdict} — ${fullRepo}\n\n` +
+                `**Runners (${runnersData.total_count}):**\n${runnerLines.join("\n")}\n\n` +
+                `**Queue:** ${queued} queued · ${inProgress} in-progress · ${online.length} online runner(s)` +
+                issueText,
+            },
+          ],
         };
       } catch (err) {
-        return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+        };
       }
     },
   );
@@ -462,42 +721,67 @@ be set here.`,
         runner: z
           .string()
           .describe("Runner name (e.g. 'omv-2') or its numeric id."),
-        labels: z
-          .array(z.string())
-          .describe("Custom labels to apply."),
+        labels: z.array(z.string()).describe("Custom labels to apply."),
         mode: z
           .enum(["add", "replace"])
           .default("add")
-          .describe("'add' appends to existing custom labels; 'replace' overwrites the whole custom set."),
+          .describe(
+            "'add' appends to existing custom labels; 'replace' overwrites the whole custom set.",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
     async ({ repo, runner, labels, mode }) => {
       const fullRepo = resolveRepo(repo);
       try {
-        const data = await ghJson<{ runners: Array<{ id: number; name: string }> }>(
-          ["api", `repos/${fullRepo}/actions/runners`]);
-        const match = data.runners.find((r) => r.name === runner || String(r.id) === runner);
+        const data = await ghJson<{
+          runners: Array<{ id: number; name: string }>;
+        }>(["api", `repos/${fullRepo}/actions/runners`]);
+        const match = data.runners.find(
+          (r) => r.name === runner || String(r.id) === runner,
+        );
         if (!match) {
-          return { content: [{ type: "text",
-            text: `❌ No runner named or id '${runner}' on **${fullRepo}**. ` +
-              `Known: ${data.runners.map((r) => r.name).join(", ") || "(none)"}.` }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `❌ No runner named or id '${runner}' on **${fullRepo}**. ` +
+                  `Known: ${data.runners.map((r) => r.name).join(", ") || "(none)"}.`,
+              },
+            ],
+          };
         }
 
         const method = mode === "replace" ? "PUT" : "POST";
-        const args = ["api", "-X", method, `repos/${fullRepo}/actions/runners/${match.id}/labels`];
+        const args = [
+          "api",
+          "-X",
+          method,
+          `repos/${fullRepo}/actions/runners/${match.id}/labels`,
+        ];
         for (const l of labels) args.push("-f", `labels[]=${l}`);
         const resp = await ghJson<{ labels: Array<{ name: string }> }>(args);
 
         return {
-          content: [{
-            type: "text",
-            text: `✅ Runner **${match.name}** (${mode}) — labels now: ` +
-              resp.labels.map((l) => l.name).join(", "),
-          }],
+          content: [
+            {
+              type: "text",
+              text:
+                `✅ Runner **${match.name}** (${mode}) — labels now: ` +
+                resp.labels.map((l) => l.name).join(", "),
+            },
+          ],
         };
       } catch (err) {
-        return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+        };
       }
     },
   );
@@ -511,19 +795,40 @@ be set here.`,
 Use after applying a systemd override or when the runner appears stuck or offline.
 Service name is derived as: actions.runner.Themis128-{repo}.{runner}.service`,
       inputSchema: z.object({
-        repo: z.enum(["cloudless.gr", "cloudless-manager", "omv-ha"]).describe("Repo alias."),
-        runner: z.string().default("omv").describe("Runner name (default: omv)."),
+        repo: z
+          .enum(["cloudless.gr", "cloudless-manager", "omv-ha"])
+          .describe("Repo alias."),
+        runner: z
+          .string()
+          .default("omv")
+          .describe("Runner name (default: omv)."),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
     async ({ repo, runner }) => {
       const svc = `actions.runner.Themis128-${repo}.${runner}.service`;
       try {
-        const out = await runOnNode("omv-main",
-          `sudo systemctl restart ${svc} && echo "ok" && systemctl is-active ${svc}`);
-        return { content: [{ type: "text", text: `✅ **${svc}** restarted.\n\`\`\`\n${out}\n\`\`\`` }] };
+        const out = await runOnNode(
+          "omv-main",
+          `sudo systemctl restart ${svc} && echo "ok" && systemctl is-active ${svc}`,
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `✅ **${svc}** restarted.\n\`\`\`\n${out}\n\`\`\``,
+            },
+          ],
+        };
       } catch (err) {
-        return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+        };
       }
     },
   );
@@ -539,8 +844,13 @@ dependency, RUNNER_RETRY_RENEW_SECONDS=300, DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTT
 Also writes /etc/systemd/resolved.conf.d/retry.conf with Google + Cloudflare + Quad9 DNS.
 Runs daemon-reload and restarts the service. Idempotent — safe to run repeatedly.`,
       inputSchema: z.object({
-        repo: z.enum(["cloudless.gr", "cloudless-manager", "omv-ha"]).describe("Repo alias."),
-        runner: z.string().default("omv").describe("Runner name (default: omv)."),
+        repo: z
+          .enum(["cloudless.gr", "cloudless-manager", "omv-ha"])
+          .describe("Repo alias."),
+        runner: z
+          .string()
+          .default("omv")
+          .describe("Runner name (default: omv)."),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
@@ -558,9 +868,23 @@ Runs daemon-reload and restarts the service. Idempotent — safe to run repeated
       ].join(" && ");
       try {
         const out = await runOnNode("omv-main", writeOverride);
-        return { content: [{ type: "text", text: `✅ Systemd override applied and service restarted.\n\`\`\`\n${out}\n\`\`\`` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `✅ Systemd override applied and service restarted.\n\`\`\`\n${out}\n\`\`\``,
+            },
+          ],
+        };
       } catch (err) {
-        return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+        };
       }
     },
   );
@@ -573,10 +897,26 @@ Runs daemon-reload and restarts the service. Idempotent — safe to run repeated
       description: `Fetch recent journalctl logs from the GitHub Actions runner service on omv-main.
 Useful for diagnosing connection drops, DNS failures, job hangs, or stuck runs.`,
       inputSchema: z.object({
-        repo: z.enum(["cloudless.gr", "cloudless-manager", "omv-ha"]).describe("Repo alias."),
-        runner: z.string().default("omv").describe("Runner name (default: omv)."),
-        lines: z.number().int().min(10).max(500).default(50).describe("Number of log lines to return."),
-        since: z.string().optional().describe("journalctl --since value, e.g. '10 minutes ago' or '2025-05-23 01:00'."),
+        repo: z
+          .enum(["cloudless.gr", "cloudless-manager", "omv-ha"])
+          .describe("Repo alias."),
+        runner: z
+          .string()
+          .default("omv")
+          .describe("Runner name (default: omv)."),
+        lines: z
+          .number()
+          .int()
+          .min(10)
+          .max(500)
+          .default(50)
+          .describe("Number of log lines to return."),
+        since: z
+          .string()
+          .optional()
+          .describe(
+            "journalctl --since value, e.g. '10 minutes ago' or '2025-05-23 01:00'.",
+          ),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -584,11 +924,27 @@ Useful for diagnosing connection drops, DNS failures, job hangs, or stuck runs.`
       const svc = `actions.runner.Themis128-${repo}.${runner}.service`;
       const sf = since ? `--since "${since}"` : "";
       try {
-        const out = await runOnNode("omv-main",
-          `journalctl -u ${svc} ${sf} -n ${lines} --no-pager --output=short-iso 2>&1`);
-        return { content: [{ type: "text", text: `## Runner logs: ${svc}\n\`\`\`\n${out}\n\`\`\`` }] };
+        const out = await runOnNode(
+          "omv-main",
+          `journalctl -u ${svc} ${sf} -n ${lines} --no-pager --output=short-iso 2>&1`,
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `## Runner logs: ${svc}\n\`\`\`\n${out}\n\`\`\``,
+            },
+          ],
+        };
       } catch (err) {
-        return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+        };
       }
     },
   );
@@ -603,9 +959,21 @@ Use when the self-hosted runner crashed mid-job and GitHub still shows runs as q
 Fetches both queued and in-progress runs, optionally filters by workflow name, and cancels each.
 Set dry_run=true to preview without cancelling.`,
       inputSchema: z.object({
-        repo: z.enum(["cloudless.gr", "cloudless-manager", "omv-ha"]).describe("Repo alias."),
-        workflow: z.string().optional().describe("Filter by workflow name (partial match). Omit to cancel ALL stuck runs."),
-        dry_run: z.boolean().default(false).describe("If true, list what would be cancelled without cancelling."),
+        repo: z
+          .enum(["cloudless.gr", "cloudless-manager", "omv-ha"])
+          .describe("Repo alias."),
+        workflow: z
+          .string()
+          .optional()
+          .describe(
+            "Filter by workflow name (partial match). Omit to cancel ALL stuck runs.",
+          ),
+        dry_run: z
+          .boolean()
+          .default(false)
+          .describe(
+            "If true, list what would be cancelled without cancelling.",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
@@ -615,35 +983,77 @@ Set dry_run=true to preview without cancelling.`,
       type RunList = { workflow_runs: Run[] };
       try {
         const [q, ip] = await Promise.all([
-          ghJson<RunList>(["api", `repos/${fullRepo}/actions/runs?status=queued&per_page=50`]),
-          ghJson<RunList>(["api", `repos/${fullRepo}/actions/runs?status=in_progress&per_page=50`]),
+          ghJson<RunList>([
+            "api",
+            `repos/${fullRepo}/actions/runs?status=queued&per_page=50`,
+          ]),
+          ghJson<RunList>([
+            "api",
+            `repos/${fullRepo}/actions/runs?status=in_progress&per_page=50`,
+          ]),
         ]);
         let candidates = [...q.workflow_runs, ...ip.workflow_runs];
         if (workflow) {
-          candidates = candidates.filter((r) => r.name.toLowerCase().includes(workflow.toLowerCase()));
+          candidates = candidates.filter((r) =>
+            r.name.toLowerCase().includes(workflow.toLowerCase()),
+          );
         }
         if (candidates.length === 0) {
-          return { content: [{ type: "text",
-            text: `✅ No stuck runs on **${fullRepo}**${workflow ? ` matching "${workflow}"` : ""}.` }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: `✅ No stuck runs on **${fullRepo}**${workflow ? ` matching "${workflow}"` : ""}.`,
+              },
+            ],
+          };
         }
-        const rows = candidates.map((r) => `  - [${r.name} #${r.id}](${r.html_url}) (${r.status})`);
+        const rows = candidates.map(
+          (r) => `  - [${r.name} #${r.id}](${r.html_url}) (${r.status})`,
+        );
         if (dry_run) {
-          return { content: [{ type: "text",
-            text: `**Dry run** — would cancel ${candidates.length} run(s) on ${fullRepo}:\n${rows.join("\n")}` }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: `**Dry run** — would cancel ${candidates.length} run(s) on ${fullRepo}:\n${rows.join("\n")}`,
+              },
+            ],
+          };
         }
         const results: string[] = [];
         for (const run of candidates) {
           try {
-            await ghRaw(["api", "-X", "POST", `repos/${fullRepo}/actions/runs/${run.id}/cancel`]);
-            results.push(`  ✅ Cancelled [${run.name} #${run.id}](${run.html_url})`);
+            await ghRaw([
+              "api",
+              "-X",
+              "POST",
+              `repos/${fullRepo}/actions/runs/${run.id}/cancel`,
+            ]);
+            results.push(
+              `  ✅ Cancelled [${run.name} #${run.id}](${run.html_url})`,
+            );
           } catch {
             results.push(`  ⚠️  Failed to cancel ${run.name} #${run.id}`);
           }
         }
-        return { content: [{ type: "text",
-          text: `## Cancelled ${results.length} run(s) on ${fullRepo}\n\n${results.join("\n")}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `## Cancelled ${results.length} run(s) on ${fullRepo}\n\n${results.join("\n")}`,
+            },
+          ],
+        };
       } catch (err) {
-        return { content: [{ type: "text", text: `❌ Error: ${err instanceof Error ? err.message : String(err)}` }] };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `❌ Error: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+        };
       }
     },
   );
