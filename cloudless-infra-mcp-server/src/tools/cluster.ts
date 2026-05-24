@@ -5,7 +5,9 @@ import { NodeName } from "../constants.js";
 
 const NodeSchema = z
   .enum(["omv-ha", "omv-main"])
-  .describe('Target Pi node: "omv-ha" (192.168.1.130) or "omv-main" (192.168.1.128, Pi 5)');
+  .describe(
+    'Target Pi node: "omv-ha" (192.168.1.130) or "omv-main" (192.168.1.128, Pi 5)',
+  );
 
 export function registerClusterTools(server: McpServer): void {
   // ── cluster_health_check ──────────────────────────────────────────────────
@@ -26,7 +28,7 @@ Use this as a first step to assess overall cluster state.`,
     },
     async ({ node }) => {
       const cmd =
-        "echo \"=== $(hostname) ===\"" +
+        'echo "=== $(hostname) ==="' +
         " && uptime" +
         " && echo '--- Disk ---'" +
         " && df -h / /srv 2>/dev/null || df -h /" +
@@ -41,7 +43,10 @@ Use this as a first step to assess overall cluster state.`,
       if (node === "both") {
         const results = await runOnBothNodes(cmd);
         const lines: string[] = [];
-        for (const [n, r] of Object.entries(results) as [NodeName, typeof results["omv-ha"]][]) {
+        for (const [n, r] of Object.entries(results) as [
+          NodeName,
+          (typeof results)["omv-ha"],
+        ][]) {
           lines.push(`## ${nodeLabel(n)}`);
           if (r.error) {
             lines.push(`❌ Connection failed: ${r.error}`);

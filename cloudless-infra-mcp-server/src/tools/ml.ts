@@ -20,9 +20,7 @@ const CRONJOBS = [
 
 type CronJobName = (typeof CRONJOBS)[number];
 
-const CronJobSchema = z
-  .enum(CRONJOBS)
-  .describe("ML pipeline CronJob name");
+const CronJobSchema = z.enum(CRONJOBS).describe("ML pipeline CronJob name");
 
 function duckdbQueryCmd(sql: string): string {
   const escaped = sql.replace(/"/g, '\\"').replace(/\n/g, " ");
@@ -63,7 +61,10 @@ Use this to diagnose pipeline failures or verify a successful weekly training ru
       const r = await runOnNode("omv-main", cmd);
       const text = r.error
         ? `❌ SSH failed: ${r.error}`
-        : "```\n" + r.stdout + (r.stderr ? "\nSTDERR:\n" + r.stderr : "") + "\n```";
+        : "```\n" +
+          r.stdout +
+          (r.stderr ? "\nSTDERR:\n" + r.stderr : "") +
+          "\n```";
       return { content: [{ type: "text", text }] };
     },
   );
@@ -99,7 +100,10 @@ Normal trigger order: ml-feature-engineer → ml-train-rfm → ml-train-churn �
       const r = await runOnNode("omv-main", cmd);
       const text = r.error
         ? `❌ SSH failed: ${r.error}`
-        : "```\n" + r.stdout + (r.stderr ? "\nSTDERR:\n" + r.stderr : "") + "\n```";
+        : "```\n" +
+          r.stdout +
+          (r.stderr ? "\nSTDERR:\n" + r.stderr : "") +
+          "\n```";
       return { content: [{ type: "text", text }] };
     },
   );
@@ -124,7 +128,9 @@ Fetches the last 200 lines by default.`,
         previous: z
           .boolean()
           .default(false)
-          .describe("Show logs from the previous (failed/terminated) container"),
+          .describe(
+            "Show logs from the previous (failed/terminated) container",
+          ),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -143,7 +149,10 @@ Fetches the last 200 lines by default.`,
       const r = await runOnNode("omv-main", cmd);
       const text = r.error
         ? `❌ SSH failed: ${r.error}`
-        : "```\n" + r.stdout + (r.stderr ? "\nSTDERR:\n" + r.stderr : "") + "\n```";
+        : "```\n" +
+          r.stdout +
+          (r.stderr ? "\nSTDERR:\n" + r.stderr : "") +
+          "\n```";
       return { content: [{ type: "text", text }] };
     },
   );
@@ -198,7 +207,13 @@ scores_recs (recommendations), anomaly_flags (API anomalies), scores_decay (cont
 Returns the first N rows with all columns.`,
       inputSchema: z.object({
         table: z
-          .enum(["scores_rfm", "scores_churn", "scores_recs", "anomaly_flags", "scores_decay"])
+          .enum([
+            "scores_rfm",
+            "scores_churn",
+            "scores_recs",
+            "anomaly_flags",
+            "scores_decay",
+          ])
           .describe("Which scores table to query"),
         limit: z
           .number()
@@ -210,7 +225,9 @@ Returns the first N rows with all columns.`,
         where: z
           .string()
           .optional()
-          .describe("Optional SQL WHERE clause (e.g. \"segment='champions'\" or \"churn_label='high'\")"),
+          .describe(
+            "Optional SQL WHERE clause (e.g. \"segment='champions'\" or \"churn_label='high'\")",
+          ),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -252,7 +269,10 @@ Use this to confirm a training job successfully saved its model artifact.`,
       const r = await runOnNode("omv-main", cmd);
       const text = r.error
         ? `❌ SSH failed: ${r.error}`
-        : "```\n" + r.stdout + (r.stderr ? "\nSTDERR:\n" + r.stderr : "") + "\n```";
+        : "```\n" +
+          r.stdout +
+          (r.stderr ? "\nSTDERR:\n" + r.stderr : "") +
+          "\n```";
       return { content: [{ type: "text", text }] };
     },
   );
@@ -270,7 +290,9 @@ High anomaly_score (closer to 0 or positive) = more anomalous; threshold is typi
         anomalies_only: z
           .boolean()
           .default(true)
-          .describe("Return only flagged anomalies (is_anomaly=true) — set false for all windows"),
+          .describe(
+            "Return only flagged anomalies (is_anomaly=true) — set false for all windows",
+          ),
         hours: z
           .number()
           .int()
@@ -343,27 +365,31 @@ Run ml_pipeline_status first to confirm the 503 is lock-related (not a code erro
         dry_run: z
           .boolean()
           .default(false)
-          .describe("If true, only show what would be done without making changes"),
+          .describe(
+            "If true, only show what would be done without making changes",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
     async ({ dry_run }) => {
       if (dry_run) {
         return {
-          content: [{
-            type: "text",
-            text: [
-              "**DRY RUN — unlock procedure:**",
-              "1. `kubectl scale deployment duckdb-api -n analytics --replicas=0`",
-              "2. `kubectl scale deployment metabase -n analytics --replicas=0`",
-              "3. `kubectl apply -f k8s/ml/duckdb-unlock-job.yaml` (Job: CHECKPOINT + exit)",
-              "4. Wait for Job completion (~15s)",
-              "5. `kubectl scale deployment duckdb-api -n analytics --replicas=1`",
-              "6. `kubectl scale deployment metabase -n analytics --replicas=1`",
-              "",
-              "Run with dry_run=false to execute.",
-            ].join("\n"),
-          }],
+          content: [
+            {
+              type: "text",
+              text: [
+                "**DRY RUN — unlock procedure:**",
+                "1. `kubectl scale deployment duckdb-api -n analytics --replicas=0`",
+                "2. `kubectl scale deployment metabase -n analytics --replicas=0`",
+                "3. `kubectl apply -f k8s/ml/duckdb-unlock-job.yaml` (Job: CHECKPOINT + exit)",
+                "4. Wait for Job completion (~15s)",
+                "5. `kubectl scale deployment duckdb-api -n analytics --replicas=1`",
+                "6. `kubectl scale deployment metabase -n analytics --replicas=1`",
+                "",
+                "Run with dry_run=false to execute.",
+              ].join("\n"),
+            },
+          ],
         };
       }
 
@@ -418,14 +444,18 @@ Run ml_pipeline_status first to confirm the 503 is lock-related (not a code erro
           `sleep 8 && ${KUBECTL} exec -n ${NS} deployment/duckdb-api -- curl -sf http://localhost:8000/health`,
         );
 
-        steps.push("\n✅ DuckDB lock cleared — analytics stack is back online.");
+        steps.push(
+          "\n✅ DuckDB lock cleared — analytics stack is back online.",
+        );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         steps.push(`\n❌ Unlock failed at step: ${msg}`);
         steps.push("You may need to scale deployments back up manually.");
       }
 
-      return { content: [{ type: "text", text: "```\n" + steps.join("\n") + "\n```" }] };
+      return {
+        content: [{ type: "text", text: "```\n" + steps.join("\n") + "\n```" }],
+      };
     },
   );
 }

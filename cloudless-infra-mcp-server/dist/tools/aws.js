@@ -85,9 +85,7 @@ Filter with a pattern (e.g. "ERROR", "timeout", "[warn]") to narrow results.`,
         catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             return {
-                content: [
-                    { type: "text", text: `❌ Failed to fetch logs: ${msg}` },
-                ],
+                content: [{ type: "text", text: `❌ Failed to fetch logs: ${msg}` }],
             };
         }
     });
@@ -108,10 +106,16 @@ Returns per-region health check observations and overall HEALTHY/UNHEALTHY statu
     }, async ({ check }) => {
         const checks = [];
         if (check === "primary" || check === "both") {
-            checks.push({ label: "PRIMARY (CloudFront)", id: PRIMARY_HEALTH_CHECK_ID });
+            checks.push({
+                label: "PRIMARY (CloudFront)",
+                id: PRIMARY_HEALTH_CHECK_ID,
+            });
         }
         if (check === "secondary" || check === "both") {
-            checks.push({ label: "SECONDARY (APIGW/Pi)", id: SECONDARY_HEALTH_CHECK_ID });
+            checks.push({
+                label: "SECONDARY (APIGW/Pi)",
+                id: SECONDARY_HEALTH_CHECK_ID,
+            });
         }
         const results = await Promise.allSettled(checks.map((c) => getHealthCheckStatus(c.id).then((s) => ({ ...s, label: c.label }))));
         const lines = ["# Route 53 Health Check Status\n"];
@@ -209,7 +213,9 @@ Useful for auditing which secrets are configured, checking last-modified dates, 
         catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             return {
-                content: [{ type: "text", text: `❌ Failed to list SSM parameters: ${msg}` }],
+                content: [
+                    { type: "text", text: `❌ Failed to list SSM parameters: ${msg}` },
+                ],
             };
         }
     });

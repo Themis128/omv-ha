@@ -72,9 +72,7 @@ export async function listSsmParameters(prefix) {
             params.push({
                 name: p.Name?.replace(`${prefix}/`, "") ?? "",
                 // Mask SecureString values
-                value: p.Type === "SecureString"
-                    ? "***REDACTED***"
-                    : (p.Value ?? ""),
+                value: p.Type === "SecureString" ? "***REDACTED***" : (p.Value ?? ""),
                 type: p.Type ?? "String",
                 lastModified: p.LastModifiedDate,
             });

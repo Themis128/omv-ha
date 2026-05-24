@@ -91,7 +91,9 @@ Run after any Traefik/Cloudflare config change or before a production release.`,
                     : " — **NO REDIRECT** (no Location header on HTTP)";
             rows.push(`${redirectIcon} \`http→https redirect\`${redirectNote}`);
             const total = SECURITY_HEADERS.length + 1;
-            const summary = pass === total ? `✅ All ${total} checks passed` : `⚠️ ${pass}/${total} passed`;
+            const summary = pass === total
+                ? `✅ All ${total} checks passed`
+                : `⚠️ ${pass}/${total} passed`;
             results.push(`## ${url}\n\n${summary}\n\n${rows.join("\n")}`);
         }
         return { content: [{ type: "text", text: results.join("\n\n---\n\n") }] };
