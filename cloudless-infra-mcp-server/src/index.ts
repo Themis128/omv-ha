@@ -11,6 +11,10 @@ import { registerMetabaseTools } from "./tools/metabase.js";
 import { registerMlTools } from "./tools/ml.js";
 import { registerFrontendTools } from "./tools/frontend.js";
 import { registerAppScanTools } from "./tools/app-scan.js";
+import { registerAwsIamTools } from "./tools/aws-iam.js";
+import { registerPrometheusTools } from "./tools/prometheus.js";
+import { registerGrafanaTools } from "./tools/grafana.js";
+import { registerCiTools } from "./tools/ci.js";
 
 const server = new McpServer({
   name: "cloudless-infra",
@@ -29,6 +33,10 @@ registerMetabaseTools(server);
 registerMlTools(server);
 registerFrontendTools(server);
 registerAppScanTools(server);
+registerAwsIamTools(server);
+registerPrometheusTools(server);
+registerGrafanaTools(server);
+registerCiTools(server);
 
 // Start the stdio transport
 const transport = new StdioServerTransport();

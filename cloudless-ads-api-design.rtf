@@ -1,0 +1,82 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0\froman\fcharset0 Times New Roman;}{\f1\fswiss\fcharset0 Arial;}}
+{\colortbl;\red0\green0\blue0;}
+\paperw12240\paperh15840\margl1800\margr1800\margt1440\margb1440
+
+{\f1\fs32\b Cloudless Marketing Dashboard\par
+Google Ads API Integration \emdash Design Documentation\par}
+\par
+{\f1\fs20\b Version:} {\f1\fs20 1.0}\par
+{\f1\fs20\b Date:} {\f1\fs20 May 12, 2026}\par
+{\f1\fs20\b Company:} {\f1\fs20 Cloudless (cloudless.gr)}\par
+{\f1\fs20\b Contact:} {\f1\fs20 baltzakis.themis@gmail.com}\par
+\par\par
+
+{\f1\fs26\b 1. Overview\par}
+\par
+{\f1\fs20 The Cloudless Marketing Dashboard is an internal web application used by the Cloudless team to monitor and report on the performance of our own Google Search Ads campaigns. The tool is not offered to third parties and does not manage ads on behalf of external clients.\par}
+\par
+{\f1\fs20 The Google Ads API integration is strictly read-only. It fetches campaign performance metrics and displays them in a unified internal dashboard alongside other marketing data sources (Google Search Console, Stripe, HubSpot). No campaigns, ad groups, keywords, or bids are created or modified through this tool.\par}
+\par\par
+
+{\f1\fs26\b 2. Architecture\par}
+\par
+{\f1\fs20\b Tech Stack:\par}
+{\f1\fs20\bullet  Frontend: Next.js 15 (React), deployed on AWS via SST (Ion)\par}
+{\f1\fs20\bullet  Backend: Next.js API Routes (Node.js runtime), AWS Lambda\par}
+{\f1\fs20\bullet  Infrastructure: AWS (Lambda, SSM Parameter Store, CloudFront), self-hosted k3s cluster (Raspberry Pi)\par}
+{\f1\fs20\bullet  Authentication: Amazon Cognito (admin-only JWT gate on all API routes)\par}
+\par
+{\f1\fs20\b Data Flow:\par}
+{\f1\fs20 1. Authenticated admin user opens the dashboard at manage.cloudless.online\par}
+{\f1\fs20 2. Dashboard calls internal API route: GET /api/admin/campaigns/google\par}
+{\f1\fs20 3. API route retrieves OAuth credentials and Developer Token from AWS SSM Parameter Store\par}
+{\f1\fs20 4. API route calls the Google Ads API (GoogleAdsService.SearchStream) to fetch campaign metrics\par}
+{\f1\fs20 5. Metrics are returned to the frontend and rendered in a read-only table/chart\par}
+\par\par
+
+{\f1\fs26\b 3. Google Ads API Usage\par}
+\par
+{\f1\fs20\b Account structure:\par}
+{\f1\fs20\bullet  Manager Account (MCC): 988-935-9009 (Cloudless)\par}
+{\f1\fs20\bullet  Advertiser Account: 673-797-6631 (Cloudless \emdash cloudless.gr)\par}
+\par
+{\f1\fs20\b API services used:\par}
+{\f1\fs20\bullet  GoogleAdsService (search / searchStream) \emdash read-only GAQL queries\par}
+\par
+{\f1\fs20\b GAQL queries executed:\par}
+{\f1\fs20 SELECT campaign.id, campaign.name, campaign.status,\par}
+{\f1\fs20\ \ metrics.impressions, metrics.clicks, metrics.ctr,\par}
+{\f1\fs20\ \ metrics.average_cpc, metrics.cost_micros, metrics.conversions\par}
+{\f1\fs20 FROM campaign\par}
+{\f1\fs20 WHERE campaign.status = \'91ENABLED\'92\par}
+{\f1\fs20 AND segments.date DURING LAST_30_DAYS\par}
+\par
+{\f1\fs20\b No write operations are performed. The following APIs are NOT used:\par}
+{\f1\fs20\bullet  CampaignService (mutate)\par}
+{\f1\fs20\bullet  AdGroupService (mutate)\par}
+{\f1\fs20\bullet  ConversionTrackingService\par}
+{\f1\fs20\bullet  RemarketingService\par}
+{\f1\fs20\bullet  BudgetService (mutate)\par}
+{\f1\fs20\bullet  AccountCreation or AccountLinking\par}
+\par\par
+
+{\f1\fs26\b 4. Security & Credential Handling\par}
+\par
+{\f1\fs20\bullet  Developer Token stored in AWS SSM Parameter Store (SecureString, KMS-encrypted)\par}
+{\f1\fs20\bullet  OAuth 2.0 refresh token stored in AWS SSM Parameter Store (SecureString)\par}
+{\f1\fs20\bullet  Credentials never exposed to the frontend; all API calls are server-side only\par}
+{\f1\fs20\bullet  Access to the dashboard requires a valid Cognito admin JWT\par}
+{\f1\fs20\bullet  No credentials are logged or stored in application logs\par}
+\par\par
+
+{\f1\fs26\b 5. Data Retention\par}
+\par
+{\f1\fs20 Campaign performance data is fetched on-demand and not persisted to a database. Each dashboard load triggers a fresh API call. No Google Ads data is stored beyond the HTTP response lifecycle.\par}
+\par\par
+
+{\f1\fs26\b 6. Scope Limitation\par}
+\par
+{\f1\fs20 This tool is used exclusively for Cloudless\'92s own advertising accounts. It is an internal tool and is not distributed, licensed, or offered as a service to any third party. The Google Ads API is used solely to retrieve reporting data for internal business intelligence.\par}
+\par
+}
