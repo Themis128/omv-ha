@@ -1,9 +1,17 @@
 import { z } from "zod";
 import { runOnNode } from "../services/ssh.js";
+import { K3S_TRAEFIK_VIP } from "../constants.js";
 const KUBECTL = "sudo k3s kubectl";
-// K3S_URL + K3S_TOKEN for omv-ha agent reinstall (from k3s-agent.service.env)
-const K3S_URL = "https://192.168.1.200:6443";
-const K3S_TOKEN = "K1088dbec5a8ca41f4a18407ee401a84f8dab673d42c7a3e3c391c2efae64ea0334::server:75800c077d78cfae7fd7dbf8dce58c04";
+const K3S_URL = `https://${K3S_TRAEFIK_VIP}:6443`;
+// omv-main uses a non-default k3s data-dir on the external drive
+const K3S_DATA_DIR = "/srv/dev-disk-by-uuid-a9a5a108-8095-4b7b-8011-716889995cd7/k3s";
+const NODE_TOKEN_PATH = `${K3S_DATA_DIR}/server/node-token`;
+async function fetchK3sToken() {
+    const r = await runOnNode("omv-main", `sudo cat ${NODE_TOKEN_PATH}`);
+    if (r.error)
+        throw new Error(`Could not read node-token from omv-main: ${r.error}`);
+    return r.stdout.trim();
+}
 export function registerOmvHaAgentTools(server) {
     // ── omv_ha_agent_status ───────────────────────────────────────────────────
     server.registerTool("omv_ha_agent_status", {
@@ -92,7 +100,14 @@ CAUTION: run_commands=true is destructive. Default false shows the commands only
         }),
         annotations: { readOnlyHint: false, destructiveHint: true },
     }, async ({ run_commands }) => {
-        const envFileContent = `K3S_URL=${K3S_URL}\nK3S_TOKEN=${K3S_TOKEN}\nGOGC=50`;
+        let token;
+        try {
+            token = await fetchK3sToken();
+        }
+        catch (e) {
+            return { content: [{ type: "text", text: `❌ ${String(e)}` }] };
+        }
+        const envFileContent = `K3S_URL=${K3S_URL}\nK3S_TOKEN=${token}\nGOGC=50`;
         const preview = [
             "## omv-ha Agent Rejoin — Steps",
             "",
@@ -104,16 +119,19 @@ CAUTION: run_commands=true is destructive. Default false shows the commands only
             "sudo /usr/local/bin/k3s-agent-uninstall.sh",
             "",
             "# Step 3 — Reinstall k3s-agent",
-            `curl -sfL https://get.k3s.io | K3S_URL=${K3S_URL} K3S_TOKEN=${K3S_TOKEN} sh -s - agent`,
+            `curl -sfL https://get.k3s.io | K3S_URL=${K3S_URL} K3S_TOKEN=<fetched from ${NODE_TOKEN_PATH}> sh -s - agent`,
             "",
             "# Step 4 — Write env file (preserves GOGC=50 GC tuning)",
             "sudo bash -c 'cat > /etc/systemd/system/k3s-agent.service.env << EOF",
-            envFileContent,
+            `K3S_URL=${K3S_URL}`,
+            "K3S_TOKEN=<fetched from omv-main>",
+            "GOGC=50",
             "EOF",
             "systemctl daemon-reload && systemctl start k3s-agent'",
             "```",
             "",
             "> Source: Runbook — omv-ha Demotion 2026-05-24",
+            "> Token is read live from omv-main at runtime — not stored in source.",
             "> Set `run_commands=true` to execute.",
         ].join("\n");
         if (!run_commands) {
@@ -128,7 +146,7 @@ CAUTION: run_commands=true is destructive. Default false shows the commands only
         results.push("\n### Steps 2–4: Uninstall + reinstall on omv-ha");
         const installCmd = [
             "sudo /usr/local/bin/k3s-agent-uninstall.sh 2>/dev/null || true",
-            `curl -sfL https://get.k3s.io | K3S_URL=${K3S_URL} K3S_TOKEN=${K3S_TOKEN} sh -s - agent`,
+            `curl -sfL https://get.k3s.io | K3S_URL=${K3S_URL} K3S_TOKEN=${token} sh -s - agent`,
             `sudo bash -c 'printf "${envFileContent.replace(/\n/g, "\\n")}" > /etc/systemd/system/k3s-agent.service.env && systemctl daemon-reload && systemctl start k3s-agent'`,
         ].join(" && ");
         const install = await runOnNode("omv-ha", installCmd);
