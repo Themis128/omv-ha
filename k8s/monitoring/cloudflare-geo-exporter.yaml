@@ -138,10 +138,13 @@ data:
             self.end_headers()
             self.wfile.write(enc)
 
+    class _Server(http.server.HTTPServer):
+        allow_reuse_port = True
+
     if __name__ == '__main__':
         threading.Thread(target=poll_loop, daemon=True).start()
         print(f'[geo-exporter] listening on :{PORT}', flush=True)
-        http.server.HTTPServer(('0.0.0.0', PORT), MetricsHandler).serve_forever()
+        _Server(('0.0.0.0', PORT), MetricsHandler).serve_forever()
 
 ---
 # One-time setup: mirror CF_TOKEN + CF_ZONE_ID into monitoring namespace
