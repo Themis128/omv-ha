@@ -139,6 +139,7 @@ data:
             self.wfile.write(enc)
 
     class _Server(http.server.HTTPServer):
+        allow_reuse_address = True
         allow_reuse_port = True
 
     if __name__ == '__main__':
