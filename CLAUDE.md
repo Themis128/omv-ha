@@ -41,3 +41,78 @@ Key invariants to maintain:
 ## Git history
 - Exposed Cloudflare token scrubbed from all history via `git filter-repo` on 2026-06-03 (PR #13 branch)
 - All subsequent pushes to this branch are force-pushed due to rewritten history
+
+---
+
+## Cluster operational rules
+
+### Node assignment
+| Workload type | Node | Reason |
+|---|---|---|
+| All user pods (deployments, statefulsets) | `omv` (Pi 5, 8 GB) | omv-ha is tainted control-plane:NoSchedule |
+| DaemonSets (node-exporter, flannel) | both nodes | DaemonSets tolerate control-plane taint |
+| `journal-vacuum-omv-ha` CronJob | `omv-ha` + toleration | Needs hostPID to vacuum that node's journal |
+| Alertmanager, ntfy | `omv` only | Moved off omv-ha in PR #13 |
+
+Never schedule user workloads on omv-ha — it has only ~700 MB allocatable after etcd + apiserver + controllers.
+
+### ARM64 image requirement
+Every container image deployed to this cluster **must** support `linux/arm64` (aarch64).
+- Verify: `docker manifest inspect <image> | grep -i arm64` or check Docker Hub tags
+- Images built in CI use `docker buildx` with `--platform linux/arm64`
+- Never pin to a tag that ships amd64-only (e.g., many older `:latest` tags)
+
+### Storage class selection
+| Class | Access mode | When to use |
+|---|---|---|
+| `local-path` | ReadWriteOnce | Stateful workloads that always run on `omv` (Prometheus, Grafana, duckdb-data) |
+| `nfs` | ReadWriteMany | Workloads that might move nodes or need shared access (Alertmanager) |
+
+Rule: if `nodeSelector: kubernetes.io/hostname: omv` is set, `local-path` is safe and faster.
+If no node selector or the workload might live on omv-ha someday, use `nfs`.
+
+### Secret hygiene
+- **Never commit** credentials, tokens, API keys, passwords, or kubeconfigs to this repo
+- Kubernetes secrets: create with `kubectl create secret` — never as YAML in repo
+- Helm secrets: use `existingSecret` references (see grafana-admin-credentials pattern)
+- AWS keys in k8s: inject via `envFrom.secretRef`, never in ConfigMaps or values files
+- `.gitignore` covers: `*.pem`, `*.key`, `credentials.json`, `kubeconfig*`, `token*`, `.env*`
+- If a credential is accidentally committed: run `git filter-repo --replace-text` immediately, force-push, rotate the credential
+
+### Resource limits — ARM constraints
+Every pod **must** have `resources.requests` and `resources.limits` set.
+Pi 5 (omv) total allocatable: ~7.5 GB RAM, 4 cores.
+Pi 4 (omv-ha) total allocatable after reservations: ~700 MB RAM, 4 cores.
+
+Rough budget for omv:
+- Monitoring stack: ~3 GB (Prometheus 2 GB + Grafana 768 MB + etc.)
+- Analytics stack: ~2 GB (Metabase 1 GB + duckdb-api + ML jobs)
+- Remaining: ~2.5 GB for n8n, oncall, ntfy, cloudless, home-assistant
+
+### Pre-deploy checklist (before `kubectl apply` or `helm upgrade`)
+1. Secrets exist: `kubectl get secret <name> -n <namespace>`
+2. PVCs provisioned (if needed): `kubectl get pvc -n <namespace>`
+3. Node selector is `omv` (not `omv-ha`) for any new workload
+4. Image has arm64 variant
+5. Resource limits set on all containers
+6. `storageClassName` matches node selector (local-path only if pinned to omv)
+
+### Deploy order (first-time cluster setup)
+See README.md for the full ordered deploy sequence. Summary:
+1. cert-manager, traefik, nfs-provisioner (external)
+2. Create k8s secrets (`setup-monitoring-secrets.sh`, `kubectl create secret` for each)
+3. Monitoring (`helm upgrade kube-prom`)
+4. OnCall deps → OnCall engine
+5. Analytics, n8n, ntfy, home-assistant
+6. Maintenance CronJobs
+7. PrometheusRules
+
+### Alertmanager config — dual config block
+`kube-prometheus-stack-values.yaml` has **two** `config:` blocks under `alertmanager:`.
+The first (lines ~55–109) is the production routing config (ntfy + oncall-webhook + alert-api).
+The second (lines ~154–187) is a legacy stub kept for Helm schema compatibility.
+Only the first block is active. Do not merge or delete either — Helm expects both keys.
+
+### etcd tuning (PR #13)
+Heartbeat: 300 ms, election: 3000 ms — tuned for SD-card fsync latency on omv-ha.
+Do not lower these values. `took too long` warnings <200 ms are expected and harmless.
