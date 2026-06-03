@@ -191,7 +191,15 @@ alertmanager:
 # Grafana — comprehensive admin dashboard at NodePort 10000
 grafana:
   enabled: true
-  adminPassword: "Cloudless@Admin2026!"
+  # Password stored in k8s secret — do not add adminPassword here.
+  # Create the secret first:
+  #   kubectl create secret generic grafana-admin-credentials -n monitoring \
+  #     --from-literal=admin-user=admin \
+  #     --from-literal=admin-password=<password>
+  admin:
+    existingSecret: grafana-admin-credentials
+    userKey: admin-user
+    passwordKey: admin-password
 
   service:
     type: NodePort

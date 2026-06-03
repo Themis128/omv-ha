@@ -1,12 +1,15 @@
 name: Restart Pi Self-Hosted Runners
 
 # Restarts or re-registers the GitHub Actions runner service on omv-2 and omv-3.
-# Requires PI_SSH_KEY secret (private key) and PI_SSH_HOSTS secret (comma-separated
-# user@host pairs, e.g. "tbaltzakis@omv-2,tbaltzakis@omv-3").
+# SSH targets are hardcoded: omv-2 = 192.168.1.131, omv-3 = 192.168.1.132.
+#
+# Required secrets:
+#   PI_SSH_KEY              — private SSH key with access to both hosts
+#   RUNNER_REGISTRATION_PAT — GitHub PAT with repo scope (only for re_register=true)
 #
 # Runner home is expected at ~/actions-runner on each host.
 # If the runner is already configured, only the service is restarted.
-# Pass re_register=true to fully re-register (requires GITHUB_PAT with repo scope).
+# Pass re_register=true to fully re-register.
 
 on:
   workflow_dispatch:

@@ -1,5 +1,6 @@
 node_modules/
 .env
+.env.*
 .claude/
 *.tfstate
 *.tfstate.*
@@ -9,3 +10,16 @@ terraform.tfvars
 crash.log
 *.log
 .tmp_*.b64
+
+# Credential and key files — never commit these
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+kubeconfig
+kubeconfig.*
+*-kubeconfig.yaml
+*-kubeconfig.yml
+token
+token.txt
