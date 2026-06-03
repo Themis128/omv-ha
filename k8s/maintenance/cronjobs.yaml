@@ -130,6 +130,10 @@ spec:
           restartPolicy: OnFailure
           nodeSelector:
             kubernetes.io/hostname: omv-ha
+          tolerations:
+            - key: "node-role.kubernetes.io/control-plane"
+              operator: "Exists"
+              effect: "NoSchedule"
           hostPID: true
           containers:
             - name: vacuum

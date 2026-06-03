@@ -10,11 +10,6 @@ tls-san:
 node-taint:
   - "node-role.kubernetes.io/control-plane:NoSchedule"
 
-# local-storage is node-local, so disabling on omv-ha only is safe.
-# NFS provisioner handles all persistent volumes anyway.
-disable:
-  - local-storage
-
 kube-apiserver-arg:
   - "service-node-port-range=1000-32767"
   - "max-requests-inflight=100"

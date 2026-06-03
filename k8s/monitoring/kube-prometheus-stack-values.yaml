@@ -49,7 +49,7 @@ kubeEtcd:
 kubeProxy:
   enabled: false
 
-# AlertManager — runs on omv-ha (Pi 4); NFS PVC for cross-node mobility
+# AlertManager — runs on omv (Pi 5); NFS PVC for cross-node mobility
 alertmanager:
   enabled: true
   config:
@@ -135,7 +135,7 @@ alertmanager:
   alertmanagerSpec:
     replicas: 1
     nodeSelector:
-      kubernetes.io/hostname: omv-ha
+      kubernetes.io/hostname: omv
     retention: 24h
     logLevel: warn
     resources:
