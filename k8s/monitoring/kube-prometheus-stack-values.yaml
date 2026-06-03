@@ -119,8 +119,6 @@ alertmanager:
               basic_auth:
                 username: alertmanager
                 password: "am-ntfy-2026!"
-      # After creating integration in OnCall (Integrations → + New → Alertmanager Prometheus),
-      # replace REPLACE_WITH_INTEGRATION_TOKEN with the token from the generated URL.
       - name: "oncall-webhook"
         webhook_configs:
           - url: "http://oncall-engine.oncall.svc.cluster.local:8080/integrations/v1/alertmanager/aed2bf7d35817a5e8f27306c35d3/"
