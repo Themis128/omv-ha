@@ -7,6 +7,11 @@ Log a Notion task in the **Tasks** database (`Themis128/Cloudless` workspace) wi
 - Due Date: ~1 year out
 - Content: what was changed, what to verify annually, relevant PR link
 
+Also **update the existing annual review task** "omv-ha PR #13 — annual config review"
+(https://app.notion.com/p/3747d82c410a8163a5e3f84f9216a0f1) if the new change adds
+an invariant that must be checked annually — append to its checklist rather than
+creating a separate task for every small change.
+
 ## omv-ha node (Pi 4, 1 GB) — annual config checklist
 See Notion task "omv-ha PR #13 — annual config review" (due 2027-06-03) for the full checklist.
 Key invariants to maintain:
