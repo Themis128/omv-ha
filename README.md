@@ -51,6 +51,7 @@ All secrets are created manually (`kubectl create secret`) and are **not** store
 | `oncall-mariadb-secret` | oncall | `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD` |
 | `oncall-basicauth` | oncall | `users` (htpasswd format) |
 | `aws-creds` | monitoring | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (Grafana CloudWatch) |
+| `grafana-admin-credentials` | monitoring | `admin-user`, `admin-password` (Grafana admin login) |
 | `cloudflared-credentials` | cloudless | `credentials.json` (tunnel credential JSON from omv-main) |
 
 > Note: no actual credential values are committed in this repo. Create secrets manually with `kubectl create secret` or other secret management tooling, and keep values out of source control.
