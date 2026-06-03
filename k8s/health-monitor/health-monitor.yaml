@@ -16,6 +16,9 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -127,13 +130,26 @@ spec:
                     APP_EXTERNAL_STATUS="FAIL"
                   fi
 
-                  # ── 6. Tunnel-down detection ─────────────────────────────────────────
+                  # ── 6. Check cloudflared-ha pod (HA tunnel connector on omv-ha) ─────
+                  CLOUDFLARED_HA_STATUS="FAIL"
+                  CF_HA_READY="$(kubectl get deployment cloudflared-ha -n cloudless \
+                    -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo '0')"
+
+                  if [ "${CF_HA_READY:-0}" -ge 1 ] 2>/dev/null; then
+                    echo "[${TIMESTAMP}] INFO: cloudflared-ha has ${CF_HA_READY} ready replica(s)"
+                    CLOUDFLARED_HA_STATUS="OK"
+                  else
+                    echo "[${TIMESTAMP}] WARNING: cloudflared-ha is not ready (ready=${CF_HA_READY:-0}) — HA tunnel connector is down"
+                    CLOUDFLARED_HA_STATUS="FAIL"
+                  fi
+
+                  # ── 7. Tunnel-down detection ─────────────────────────────────────────
                   if [ "${APP_INTERNAL_STATUS}" = "OK" ] && [ "${APP_EXTERNAL_STATUS}" = "FAIL" ]; then
                     echo "[${TIMESTAMP}] WARNING: app is healthy internally but unreachable externally — likely Cloudflare tunnel issue"
                   fi
 
-                  # ── 7. Summary ────────────────────────────────────────────────────────
-                  echo "[${TIMESTAMP}] health: traefik=${TRAEFIK_STATUS} app_internal=${APP_INTERNAL_STATUS} app_external=${APP_EXTERNAL_STATUS}"
+                  # ── 8. Summary ────────────────────────────────────────────────────────
+                  echo "[${TIMESTAMP}] health: traefik=${TRAEFIK_STATUS} app_internal=${APP_INTERNAL_STATUS} app_external=${APP_EXTERNAL_STATUS} cloudflared_ha=${CLOUDFLARED_HA_STATUS}"
               resources:
                 requests:
                   cpu: 50m
