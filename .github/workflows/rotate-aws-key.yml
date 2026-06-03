@@ -1,0 +1,184 @@
+name: Rotate AWS Access Key
+
+# Deactivates a compromised/stale IAM access key and creates a replacement.
+# Uses GitHub Actions OIDC (no long-lived credentials needed to run the rotation itself).
+# The new key is stored in AWS SSM Parameter Store as SecureString.
+#
+# Required: GitHubActionsOIDC role must have these IAM permissions for the target user:
+#   iam:UpdateAccessKey, iam:CreateAccessKey, iam:ListAccessKeys, iam:DeleteAccessKey
+#
+# Usage:
+#   gh workflow run rotate-aws-key.yml \
+#     -f iam_username=ses-smtp-prod \
+#     -f old_key_id=AKIAUBXIAELU5SADA3XL \
+#     -f audit_days=90
+#
+# After rotation, retrieve new credentials from SSM:
+#   aws ssm get-parameter --name /github-actions/aws-key/<username>/access-key-id --query Parameter.Value --output text
+#   aws ssm get-parameter --name /github-actions/aws-key/<username>/secret-access-key --with-decryption --query Parameter.Value --output text
+# Then update GitHub secrets manually:
+#   gh secret set AWS_ACCESS_KEY_ID --body "$(aws ssm get-parameter ...)"
+#   gh secret set AWS_SECRET_ACCESS_KEY --body "$(aws ssm get-parameter ... --with-decryption ...)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      iam_username:
+        description: "IAM username that owns the key to rotate"
+        required: true
+      old_key_id:
+        description: "Access key ID to deactivate (e.g. AKIAUBXIAELU5SADA3XL)"
+        required: true
+      audit_days:
+        description: "How many days back to check CloudTrail for key usage"
+        default: "90"
+      delete_old_key:
+        description: "Delete (not just deactivate) the old key — only set true after 14-day wait"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Print actions without executing"
+        type: boolean
+        default: false
+
+jobs:
+  rotate:
+    name: Rotate ${{ inputs.old_key_id }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required for OIDC
+      contents: read
+
+    steps:
+      - name: Authenticate via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::278585680617:role/GitHubActionsOIDC
+          aws-region: eu-west-1
+          role-session-name: key-rotation-${{ github.run_id }}
+
+      - name: Audit CloudTrail for old key usage
+        run: |
+          echo "=== CloudTrail events for ${{ inputs.old_key_id }} (last ${{ inputs.audit_days }} days) ==="
+          START=$(date -u -d "-${{ inputs.audit_days }} days" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
+                  || date -u -v-${{ inputs.audit_days }}d '+%Y-%m-%dT%H:%M:%SZ')
+
+          EVENTS=$(aws cloudtrail lookup-events \
+            --lookup-attributes "AttributeKey=AccessKeyId,AttributeValue=${{ inputs.old_key_id }}" \
+            --start-time "${START}" \
+            --query 'Events[*].{Time:EventTime,Event:EventName,User:Username,Source:EventSource}' \
+            --output json 2>/dev/null || echo '[]')
+
+          COUNT=$(echo "${EVENTS}" | jq length)
+          echo "Found ${COUNT} CloudTrail event(s)."
+
+          if [ "${COUNT}" -gt 0 ]; then
+            echo "${EVENTS}" | jq -r '.[] | "\(.Time)  \(.Source):\(.Event)  user=\(.User)"'
+            echo "::warning::Key was used ${COUNT} time(s). Review events above for unauthorized activity."
+          else
+            echo "No CloudTrail events found — key appears unused or events have expired."
+          fi
+
+          echo "### CloudTrail audit — ${{ inputs.old_key_id }}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Events in last ${{ inputs.audit_days }} days: **${COUNT}**" >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${COUNT}" -gt 0 ]; then
+            echo "" >> "${GITHUB_STEP_SUMMARY}"
+            echo "\`\`\`" >> "${GITHUB_STEP_SUMMARY}"
+            echo "${EVENTS}" | jq -r '.[] | "\(.Time)  \(.Source):\(.Event)  user=\(.User)"' >> "${GITHUB_STEP_SUMMARY}"
+            echo "\`\`\`" >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Deactivate old key
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "DRY RUN — would deactivate key ${{ inputs.old_key_id }} for user ${{ inputs.iam_username }}"
+            exit 0
+          fi
+
+          aws iam update-access-key \
+            --user-name "${{ inputs.iam_username }}" \
+            --access-key-id "${{ inputs.old_key_id }}" \
+            --status Inactive
+
+          echo "Key ${{ inputs.old_key_id }} deactivated (not deleted — safe to re-activate if needed)"
+          echo "- Deactivated key: \`${{ inputs.old_key_id }}\`" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Create replacement key
+        id: new_key
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "DRY RUN — would create new access key for user ${{ inputs.iam_username }}"
+            echo "new_key_id=DRY-RUN-KEY-ID" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          RESULT=$(aws iam create-access-key --user-name "${{ inputs.iam_username }}")
+          NEW_KEY_ID=$(echo "${RESULT}" | jq -r '.AccessKey.AccessKeyId')
+          NEW_SECRET=$(echo "${RESULT}" | jq -r '.AccessKey.SecretAccessKey')
+
+          echo "new_key_id=${NEW_KEY_ID}" >> "${GITHUB_OUTPUT}"
+
+          # Store in SSM SecureString — never print to log
+          SSM_PREFIX="/github-actions/aws-key/${{ inputs.iam_username }}"
+
+          aws ssm put-parameter \
+            --name "${SSM_PREFIX}/access-key-id" \
+            --value "${NEW_KEY_ID}" \
+            --type String \
+            --overwrite
+
+          aws ssm put-parameter \
+            --name "${SSM_PREFIX}/secret-access-key" \
+            --value "${NEW_SECRET}" \
+            --type SecureString \
+            --overwrite
+
+          unset NEW_SECRET RESULT
+
+          echo "- Created new key: \`${NEW_KEY_ID}\`" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- Stored in SSM: \`${SSM_PREFIX}/\`" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Delete old key (only if requested)
+        if: ${{ inputs.delete_old_key == true }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "DRY RUN — would delete key ${{ inputs.old_key_id }}"
+            exit 0
+          fi
+
+          aws iam delete-access-key \
+            --user-name "${{ inputs.iam_username }}" \
+            --access-key-id "${{ inputs.old_key_id }}"
+
+          echo "Old key ${{ inputs.old_key_id }} permanently deleted."
+          echo "- **Deleted** old key: \`${{ inputs.old_key_id }}\`" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Print retrieval instructions
+        run: |
+          SSM_PREFIX="/github-actions/aws-key/${{ inputs.iam_username }}"
+          cat >> "${GITHUB_STEP_SUMMARY}" <<EOF
+
+          ### Next steps — update GitHub secrets
+
+          Retrieve new credentials and update GitHub secrets:
+          \`\`\`bash
+          NEW_KEY_ID=\$(aws ssm get-parameter \\
+            --name "${SSM_PREFIX}/access-key-id" \\
+            --query Parameter.Value --output text)
+
+          NEW_SECRET=\$(aws ssm get-parameter \\
+            --name "${SSM_PREFIX}/secret-access-key" \\
+            --with-decryption \\
+            --query Parameter.Value --output text)
+
+          gh secret set AWS_ACCESS_KEY_ID     --body "\${NEW_KEY_ID}"
+          gh secret set AWS_SECRET_ACCESS_KEY --body "\${NEW_SECRET}"
+
+          # Then delete from SSM (optional — it's already SecureString):
+          aws ssm delete-parameter --name "${SSM_PREFIX}/access-key-id"
+          aws ssm delete-parameter --name "${SSM_PREFIX}/secret-access-key"
+          \`\`\`
+
+          > **Wait 14 days** before setting \`delete_old_key: true\` to confirm nothing breaks.
+          > Old key is currently **Inactive** (not deleted — reversible).
+          EOF

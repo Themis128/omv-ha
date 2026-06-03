@@ -1,0 +1,118 @@
+name: Tailscale Connect (reusable)
+
+# Reusable workflow — establish a Tailscale connection in GitHub Actions.
+#
+# Usage in caller workflow:
+#
+#   jobs:
+#     deploy:
+#       uses: ./.github/workflows/tailscale-connect.yml
+#       secrets: inherit
+#       with:
+#         tags: tag:ci
+#
+# Or as a job step by calling the action directly (see example at bottom).
+#
+# Required secrets (set with: gh secret set NAME):
+#   TS_OAUTH_CLIENT_ID   — Tailscale OAuth client ID (tskey-client-...)
+#   TS_OAUTH_SECRET      — Tailscale OAuth client secret
+#
+# The OAuth client must have scope "auth_keys" and the tag must exist in
+# your tailnet ACL:  "tagOwners": { "tag:ci": ["autogroup:admin"] }
+#
+# Ephemeral nodes are auto-removed from the tailnet when the runner exits.
+
+on:
+  workflow_call:
+    inputs:
+      tags:
+        description: "Tailscale ACL tags for this node (comma-separated)"
+        type: string
+        default: "tag:ci"
+      version:
+        description: "Tailscale version (empty = latest)"
+        type: string
+        default: ""
+      args:
+        description: "Extra args passed to tailscaled (e.g. --exit-node)"
+        type: string
+        default: ""
+    secrets:
+      TS_OAUTH_CLIENT_ID:
+        required: true
+      TS_OAUTH_SECRET:
+        required: true
+    outputs:
+      tailscale_ip:
+        description: "This node's Tailscale IP (IPv4)"
+        value: ${{ jobs.connect.outputs.tailscale_ip }}
+
+  # Also allow direct dispatch for testing
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: "Tailscale ACL tags"
+        default: "tag:ci"
+
+jobs:
+  connect:
+    name: Tailscale connect
+    runs-on: ubuntu-latest
+    outputs:
+      tailscale_ip: ${{ steps.ts.outputs.tailscale_ip }}
+
+    steps:
+      - name: Connect to Tailscale
+        id: ts
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: ${{ inputs.tags || 'tag:ci' }}
+          version: ${{ inputs.version || '' }}
+          args: ${{ inputs.args || '' }}
+          ephemeral: true   # auto-removes node from tailnet when runner exits
+
+      - name: Verify connectivity + print Tailscale IP
+        run: |
+          IP=$(tailscale ip -4 2>/dev/null || echo "unavailable")
+          echo "tailscale_ip=${IP}" >> "${GITHUB_OUTPUT}"
+          echo "Tailscale IP: ${IP}"
+          echo "### Tailscale connected" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Node IP: \`${IP}\`  Tags: \`${{ inputs.tags || 'tag:ci' }}\`" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Verify Pi node reachability (optional smoke test)
+        run: |
+          # Ping omv-main by Tailscale hostname; skip gracefully if not reachable
+          if tailscale ping --c 1 omv 2>/dev/null; then
+            echo "omv reachable via Tailscale"
+          else
+            echo "::warning::omv not reachable via Tailscale (check ACLs or node status)"
+          fi
+
+# ─── Example: inline usage (no reusable workflow call) ────────────────────────
+#
+# Add this as a step in any job that needs Pi cluster access:
+#
+#   - name: Connect to Tailscale
+#     uses: tailscale/github-action@v3
+#     with:
+#       oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+#       oauth-secret:    ${{ secrets.TS_OAUTH_SECRET }}
+#       tags:            tag:ci
+#       ephemeral:       true
+#
+#   - name: SSH into Pi node
+#     run: ssh tbaltzakis@omv "kubectl get pods -A"
+#
+# ─── Setup checklist ──────────────────────────────────────────────────────────
+# 1. Tailscale Admin → Settings → OAuth Clients → Create client
+#    Scope: auth_keys (read + write)
+#    → copy Client ID (tskey-client-...) and Secret (tskey-secret-...)
+#
+# 2. Add tag to tailnet ACL (admin.tailscale.com → Access Controls):
+#    "tagOwners": { "tag:ci": ["autogroup:admin"] }
+#
+# 3. Set GitHub secrets:
+#    gh secret set TS_OAUTH_CLIENT_ID --body "tskey-client-..."
+#    gh secret set TS_OAUTH_SECRET    --body "tskey-secret-..."

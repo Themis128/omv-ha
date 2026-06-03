@@ -162,6 +162,50 @@ kubectl create secret generic cloudflare-api-token \
 
 ---
 
+## 7. AWS IAM Access Key
+
+Used by GitHub Actions for deployments (e.g. ECR push, S3 sync, SES). Prefer OIDC over
+long-lived keys — the `GitHubActionsOIDC` role already exists for this purpose.
+
+### Automated rotation (preferred)
+
+```bash
+# 1. Grant the OIDC role permissions to manage keys (run once, needs AWS admin):
+AWS_PROFILE=<admin> bash k8s/ha/scripts/grant-iam-key-rotation.sh
+
+# 2. Run the rotation workflow from GitHub Actions UI:
+#    Actions → Rotate AWS Access Key
+#    Inputs: iam_username=<user>, old_key_id=AKIA..., dry_run=true (test first)
+
+# 3. After confirming no errors for 14 days, re-run with delete_old_key=true
+```
+
+### Manual rotation
+
+```bash
+# Deactivate (reversible)
+aws iam update-access-key \
+  --user-name <username> \
+  --access-key-id AKIA... \
+  --status Inactive
+
+# Create replacement
+aws iam create-access-key --user-name <username>
+# Store AccessKeyId + SecretAccessKey in GitHub secrets:
+gh secret set AWS_ACCESS_KEY_ID     --body "AKIA..."
+gh secret set AWS_SECRET_ACCESS_KEY --body "..."
+
+# Audit usage before deleting (check last 90 days):
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=AccessKeyId,AttributeValue=AKIA... \
+  --query 'Events[*].{Time:EventTime,Event:EventName}' --output table
+
+# Delete old key after 14-day wait
+aws iam delete-access-key --user-name <username> --access-key-id AKIA...
+```
+
+---
+
 ## Rotation Schedule (recommended)
 
 | Material | Frequency |
@@ -171,6 +215,7 @@ kubectl create secret generic cloudflare-api-token \
 | HMAC secret | Every 90 days or on any webhook exposure |
 | Cloudflare token | Every 90 days or on any CI/CD credential leak |
 | ECR pull secret | Automatic (every 6h) |
+| AWS IAM access key | Every 90 days or immediately on exposure |
 | Internal CA | Every 10 years or on compromise |
 
 ---
@@ -182,3 +227,5 @@ kubectl create secret generic cloudflare-api-token \
 | `k8s/keycloak/postgres-tls.yaml` | cert-manager Certificate + Issuer for PostgreSQL TLS |
 | `k8s/cloudless/ecr-cred-refresher.yaml` | ECR credential auto-rotation CronJob |
 | `k8s/cloudless/auto-healer.yaml` | Detects ECR pull failures and triggers refresh |
+| `k8s/ha/scripts/grant-iam-key-rotation.sh` | Grants OIDC role permissions for key rotation |
+| `.github/workflows/rotate-aws-key.yml` | Automated key rotation workflow (OIDC, CloudTrail audit, SSM) |
