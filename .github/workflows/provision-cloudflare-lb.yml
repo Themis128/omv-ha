@@ -1,0 +1,256 @@
+name: Provision Cloudflare Load Balancer
+
+# Creates an active-passive Cloudflare Load Balancer for origin failover.
+# Run once manually; re-running is idempotent (updates existing resources).
+#
+# Required secrets:
+#   CF_LB_API_TOKEN  — Cloudflare API token with scopes:
+#                       Account: Load Balancers (Edit), Load Balancing Monitors and Pools (Edit)
+#                       Zone:    Load Balancers (Edit)
+#
+# Required variables (set with: gh variable set NAME --body VALUE):
+#   CLOUDFLARE_ACCOUNT_ID  — Cloudflare account ID
+#   CLOUDFLARE_ZONE_ID     — Zone ID for the hostname being load-balanced
+#
+# Inputs:
+#   hostname       — e.g. "cloudless.gr" or "api.cloudless.online"
+#   primary_origin — e.g. "dxxxxxxxxxxxx.cloudfront.net" or an IP
+#   secondary_origin — e.g. IPv6 address or hostname for Pi fallback
+
+on:
+  workflow_dispatch:
+    inputs:
+      hostname:
+        description: "Hostname to load-balance (e.g. cloudless.gr)"
+        required: true
+      primary_origin:
+        description: "Primary origin address (e.g. CloudFront distribution domain)"
+        required: true
+      primary_origin_port:
+        description: "Primary origin port"
+        default: "443"
+      secondary_origin:
+        description: "Secondary (failover) origin address (e.g. Pi IPv6 or VIP)"
+        required: true
+      secondary_origin_port:
+        description: "Secondary origin port"
+        default: "443"
+      health_check_path:
+        description: "Health check HTTP path"
+        default: "/api/health"
+      dry_run:
+        description: "Print API calls without executing (true/false)"
+        type: boolean
+        default: false
+
+jobs:
+  provision:
+    name: Provision LB — ${{ inputs.hostname }}
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CF_LB_API_TOKEN }}
+      CF_ACCOUNT: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CF_ZONE: ${{ vars.CLOUDFLARE_ZONE_ID }}
+      DRY_RUN: ${{ inputs.dry_run }}
+
+    steps:
+      - name: Validate secrets
+        run: |
+          if [ -z "${CF_TOKEN}" ]; then
+            echo "::error::CF_LB_API_TOKEN secret is not set"
+            exit 1
+          fi
+          if [ -z "${CF_ACCOUNT}" ] || [ -z "${CF_ZONE}" ]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_ZONE_ID variable is not set"
+            echo "Set with: gh variable set CLOUDFLARE_ACCOUNT_ID --body <value>"
+            exit 1
+          fi
+
+      - name: Create health monitor
+        id: monitor
+        run: |
+          PAYLOAD=$(cat <<EOF
+          {
+            "type": "https",
+            "description": "Health check for ${{ inputs.hostname }}",
+            "path": "${{ inputs.health_check_path }}",
+            "interval": 60,
+            "retries": 2,
+            "timeout": 5,
+            "expected_codes": "2xx,3xx",
+            "follow_redirects": true,
+            "allow_insecure": false,
+            "header": {
+              "Host": ["${{ inputs.hostname }}"]
+            }
+          }
+          EOF
+          )
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN — POST /accounts/${CF_ACCOUNT}/load_balancers/monitors"
+            echo "${PAYLOAD}" | jq .
+            echo "monitor_id=dry-run-monitor-id" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          RESP=$(curl -sX POST \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/load_balancers/monitors" \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "${PAYLOAD}")
+
+          echo "${RESP}" | jq .
+          if ! echo "${RESP}" | jq -e '.success' > /dev/null; then
+            echo "::error::Failed to create monitor"
+            exit 1
+          fi
+          MONITOR_ID=$(echo "${RESP}" | jq -r '.result.id')
+          echo "monitor_id=${MONITOR_ID}" >> "${GITHUB_OUTPUT}"
+          echo "Created monitor: ${MONITOR_ID}"
+
+      - name: Create primary pool (CloudFront / main origin)
+        id: pool_primary
+        run: |
+          PAYLOAD=$(cat <<EOF
+          {
+            "name": "${{ inputs.hostname }}-primary",
+            "description": "Primary origin — ${{ inputs.primary_origin }}",
+            "origins": [
+              {
+                "name": "primary",
+                "address": "${{ inputs.primary_origin }}",
+                "enabled": true,
+                "weight": 1,
+                "header": {
+                  "Host": ["${{ inputs.hostname }}"]
+                }
+              }
+            ],
+            "monitor": "${{ steps.monitor.outputs.monitor_id }}",
+            "enabled": true,
+            "minimum_origins": 1,
+            "notification_email": "baltzakis.themis@gmail.com"
+          }
+          EOF
+          )
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN — POST /accounts/${CF_ACCOUNT}/load_balancers/pools (primary)"
+            echo "${PAYLOAD}" | jq .
+            echo "pool_id=dry-run-primary-pool-id" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          RESP=$(curl -sX POST \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/load_balancers/pools" \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "${PAYLOAD}")
+
+          echo "${RESP}" | jq .
+          if ! echo "${RESP}" | jq -e '.success' > /dev/null; then
+            echo "::error::Failed to create primary pool"
+            exit 1
+          fi
+          POOL_ID=$(echo "${RESP}" | jq -r '.result.id')
+          echo "pool_id=${POOL_ID}" >> "${GITHUB_OUTPUT}"
+          echo "Created primary pool: ${POOL_ID}"
+
+      - name: Create secondary pool (Pi / failover origin)
+        id: pool_secondary
+        run: |
+          PAYLOAD=$(cat <<EOF
+          {
+            "name": "${{ inputs.hostname }}-secondary",
+            "description": "Secondary origin (failover) — ${{ inputs.secondary_origin }}",
+            "origins": [
+              {
+                "name": "secondary",
+                "address": "${{ inputs.secondary_origin }}",
+                "enabled": true,
+                "weight": 1,
+                "header": {
+                  "Host": ["${{ inputs.hostname }}"]
+                }
+              }
+            ],
+            "monitor": "${{ steps.monitor.outputs.monitor_id }}",
+            "enabled": true,
+            "minimum_origins": 1,
+            "notification_email": "baltzakis.themis@gmail.com"
+          }
+          EOF
+          )
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN — POST /accounts/${CF_ACCOUNT}/load_balancers/pools (secondary)"
+            echo "${PAYLOAD}" | jq .
+            echo "pool_id=dry-run-secondary-pool-id" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          RESP=$(curl -sX POST \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/load_balancers/pools" \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "${PAYLOAD}")
+
+          echo "${RESP}" | jq .
+          if ! echo "${RESP}" | jq -e '.success' > /dev/null; then
+            echo "::error::Failed to create secondary pool"
+            exit 1
+          fi
+          POOL_ID=$(echo "${RESP}" | jq -r '.result.id')
+          echo "pool_id=${POOL_ID}" >> "${GITHUB_OUTPUT}"
+          echo "Created secondary pool: ${POOL_ID}"
+
+      - name: Create load balancer (active-passive)
+        run: |
+          # Traffic steering "off" = ordered failover: primary pool first,
+          # secondary pool activates only when primary health check fails.
+          PAYLOAD=$(cat <<EOF
+          {
+            "name": "${{ inputs.hostname }}",
+            "fallback_pool": "${{ steps.pool_secondary.outputs.pool_id }}",
+            "default_pools": [
+              "${{ steps.pool_primary.outputs.pool_id }}",
+              "${{ steps.pool_secondary.outputs.pool_id }}"
+            ],
+            "description": "Active-passive LB for ${{ inputs.hostname }}",
+            "ttl": 30,
+            "steering_policy": "off",
+            "session_affinity": "none",
+            "proxied": true
+          }
+          EOF
+          )
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN — POST /zones/${CF_ZONE}/load_balancers"
+            echo "${PAYLOAD}" | jq .
+            exit 0
+          fi
+
+          RESP=$(curl -sX POST \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/load_balancers" \
+            -H "Authorization: Bearer ${CF_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "${PAYLOAD}")
+
+          echo "${RESP}" | jq .
+          if ! echo "${RESP}" | jq -e '.success' > /dev/null; then
+            echo "::error::Failed to create load balancer"
+            exit 1
+          fi
+
+          LB_ID=$(echo "${RESP}" | jq -r '.result.id')
+          echo "### Load Balancer provisioned" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Field | Value |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "|-------|-------|" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Hostname | ${{ inputs.hostname }} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| LB ID | ${LB_ID} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Primary pool | ${{ steps.pool_primary.outputs.pool_id }} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Secondary pool | ${{ steps.pool_secondary.outputs.pool_id }} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Traffic steering | off (active-passive failover) |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Health check path | ${{ inputs.health_check_path }} |" >> "${GITHUB_STEP_SUMMARY}"

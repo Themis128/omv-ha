@@ -49,7 +49,7 @@ kubeEtcd:
 kubeProxy:
   enabled: false
 
-# AlertManager — runs on omv-ha (Pi 4); NFS PVC for cross-node mobility
+# AlertManager — runs on omv (Pi 5); NFS PVC for cross-node mobility
 alertmanager:
   enabled: true
   config:
@@ -119,8 +119,6 @@ alertmanager:
               basic_auth:
                 username: alertmanager
                 password: "am-ntfy-2026!"
-      # After creating integration in OnCall (Integrations → + New → Alertmanager Prometheus),
-      # replace REPLACE_WITH_INTEGRATION_TOKEN with the token from the generated URL.
       - name: "oncall-webhook"
         webhook_configs:
           - url: "http://oncall-engine.oncall.svc.cluster.local:8080/integrations/v1/alertmanager/aed2bf7d35817a5e8f27306c35d3/"
@@ -135,7 +133,7 @@ alertmanager:
   alertmanagerSpec:
     replicas: 1
     nodeSelector:
-      kubernetes.io/hostname: omv-ha
+      kubernetes.io/hostname: omv
     retention: 24h
     logLevel: warn
     resources:
@@ -191,7 +189,15 @@ alertmanager:
 # Grafana — comprehensive admin dashboard at NodePort 10000
 grafana:
   enabled: true
-  adminPassword: "Cloudless@Admin2026!"
+  # Password stored in k8s secret — do not add adminPassword here.
+  # Create the secret first:
+  #   kubectl create secret generic grafana-admin-credentials -n monitoring \
+  #     --from-literal=admin-user=admin \
+  #     --from-literal=admin-password=<password>
+  admin:
+    existingSecret: grafana-admin-credentials
+    userKey: admin-user
+    passwordKey: admin-password
 
   service:
     type: NodePort

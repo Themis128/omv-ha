@@ -54,7 +54,7 @@ spec:
         app: ntfy
     spec:
       nodeSelector:
-        kubernetes.io/hostname: omv-ha
+        kubernetes.io/hostname: omv
       containers:
         - name: ntfy
           image: binwiederhier/ntfy
