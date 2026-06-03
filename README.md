@@ -32,7 +32,7 @@ k8s/
 | Namespace | Contents | Node affinity |
 |-----------|----------|---------------|
 | `analytics` | duckdb-api, metabase, s3-to-duckdb-sync CronJob | omv |
-| `cloudless` | cloudless-manager, cloudless-app (standby), oauth2-proxy | omv |
+| `cloudless` | cloudless-manager, cloudless-app (standby), oauth2-proxy, cloudflared-ha | omv / omv-ha |
 | `home-assistant` | home-assistant | omv |
 | `maintenance` | CronJobs (RS GC, journal vacuum, health check) | mixed |
 | `monitoring` | Prometheus, Grafana, Alertmanager, kube-state-metrics, node-exporter | omv / omv-ha |
@@ -51,6 +51,7 @@ All secrets are created manually (`kubectl create secret`) and are **not** store
 | `oncall-mariadb-secret` | oncall | `MYSQL_ROOT_PASSWORD`, `MYSQL_PASSWORD` |
 | `oncall-basicauth` | oncall | `users` (htpasswd format) |
 | `aws-creds` | monitoring | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (Grafana CloudWatch) |
+| `cloudflared-credentials` | cloudless | `credentials.json` (tunnel credential JSON from omv-main) |
 
 > Note: no actual credential values are committed in this repo. Create secrets manually with `kubectl create secret` or other secret management tooling, and keep values out of source control.
 > 
