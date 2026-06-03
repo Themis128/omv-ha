@@ -116,3 +116,62 @@ Only the first block is active. Do not merge or delete either — Helm expects b
 ### etcd tuning (PR #13)
 Heartbeat: 300 ms, election: 3000 ms — tuned for SD-card fsync latency on omv-ha.
 Do not lower these values. `took too long` warnings <200 ms are expected and harmless.
+
+---
+
+## AWS Cognito — cloudless.online user auth
+
+### Pool topology
+
+| Resource | Value |
+|---|---|
+| Region | `us-east-1` |
+| User Pool ID | stored as `NEXT_PUBLIC_COGNITO_USER_POOL_ID` in `Themis128/cloudless.gr` GitHub secrets |
+| App Client ID | stored as `NEXT_PUBLIC_COGNITO_CLIENT_ID` in `Themis128/cloudless.gr` GitHub secrets |
+| App client type | **Public** (no client secret) — Next.js SPA/SSR uses PKCE flow |
+| Admin access | `AWS_PROFILE=admin` locally; `GitHubActionsOIDC` role in CI |
+
+`NEXT_PUBLIC_*` values are baked into the browser bundle — they are not sensitive to expose, but
+keeping them in GitHub secrets centralizes config management and allows rotation without re-committing.
+
+### Cognito operational rules
+
+1. **Never hardcode** User Pool ID, Client ID, or any Cognito admin credentials in manifests, scripts, or this repo
+2. **Admin operations from CI** must use the `GitHubActionsOIDC` role (OIDC, no static keys). Add `cognito-idp:*` to the role policy only if needed — scope to the specific pool ARN.
+3. **App client is public** — it has no client secret. Never add a client secret to the existing Next.js client. If a confidential client is needed (e.g., server-to-server), create a separate app client.
+4. **User import / bulk ops** require an IAM role with `cognito-idp:AdminCreateUser` scoped to the pool ARN — not wildcard `cognito-idp:*`
+5. **Hosted UI domain** — if configured, the domain name is the Cognito auth entry point for OAuth flows; keep it aligned with `cloudless.online` branding
+6. **Password policy** — min 8 chars, require uppercase + number + symbol. Do not weaken it.
+7. **MFA** — optional for users (TOTP or SMS). Do not force-disable MFA pool-wide.
+8. **Token expiry defaults** (do not reduce): access 1h, ID 1h, refresh 30d. Shorter refresh forces frequent re-logins on the Pi-served app.
+
+### Cognito ↔ cluster interaction
+
+The Cognito User Pool is an AWS-side resource — the k3s cluster does not directly connect to it.
+Interaction paths:
+- `cloudless-app` (Next.js, `cloudless` namespace) — validates Cognito JWT tokens on incoming requests
+- `cloudless.gr` CI — reads `NEXT_PUBLIC_COGNITO_*` build args from GitHub secrets and bakes them into the Docker image
+- Admin operations — run from local machine with `AWS_PROFILE=admin` or via GitHub Actions
+
+### Required IAM permissions for Cognito admin operations
+
+These must be attached to whatever role/user performs pool management:
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "cognito-idp:ListUsers",
+    "cognito-idp:AdminGetUser",
+    "cognito-idp:AdminCreateUser",
+    "cognito-idp:AdminSetUserPassword",
+    "cognito-idp:AdminDisableUser",
+    "cognito-idp:AdminEnableUser",
+    "cognito-idp:AdminDeleteUser",
+    "cognito-idp:AdminAddUserToGroup",
+    "cognito-idp:AdminRemoveUserFromGroup",
+    "cognito-idp:ListGroups",
+    "cognito-idp:AdminListGroupsForUser"
+  ],
+  "Resource": "arn:aws:cognito-idp:us-east-1:278585680617:userpool/<POOL_ID>"
+}
+```
