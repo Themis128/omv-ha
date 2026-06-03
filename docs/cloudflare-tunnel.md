@@ -93,10 +93,15 @@ ingress:
 TLS termination with valid certs is handled by Traefik via cert-manager (Let's Encrypt
 Route53 challenge).
 
-## Cloudflare API credentials (stored in `.env`)
+## Cloudflare API credentials
+
+> **⚠️ SECURITY:** A token was previously hardcoded here and has been exposed in git history.
+> Rotate it immediately: Cloudflare dashboard → My Profile → API Tokens → Revoke.
+> Create a replacement with scope `Zone:DNS:Edit` on `cloudless.online` and store it
+> in the MCP server's environment, not in this file.
 
 ```
-CLOUDFLARE_API_TOKEN=CLOUDFLARE_API_TOKEN_REDACTED
+CLOUDFLARE_API_TOKEN=<set via env — never commit>
 CLOUDFLARE_ZONE_ID=aa875388a91714c369b1e20107e643f5
 ```
 

@@ -1,0 +1,120 @@
+name: Restart Pi Self-Hosted Runners
+
+# Restarts or re-registers the GitHub Actions runner service on omv-2 and omv-3.
+# Requires PI_SSH_KEY secret (private key) and PI_SSH_HOSTS secret (comma-separated
+# user@host pairs, e.g. "tbaltzakis@omv-2,tbaltzakis@omv-3").
+#
+# Runner home is expected at ~/actions-runner on each host.
+# If the runner is already configured, only the service is restarted.
+# Pass re_register=true to fully re-register (requires GITHUB_PAT with repo scope).
+
+on:
+  workflow_dispatch:
+    inputs:
+      re_register:
+        description: "Re-register runners (true) or just restart the service (false)"
+        type: boolean
+        default: false
+      runner_labels:
+        description: "Runner labels (comma-separated)"
+        default: "pi,self-hosted"
+
+jobs:
+  restart-runners:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ["omv-2", "omv-3"]
+
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PI_SSH_KEY }}" > ~/.ssh/pi_key
+          chmod 600 ~/.ssh/pi_key
+          cat >> ~/.ssh/config <<EOF
+          Host omv-2
+            HostName 192.168.1.131
+            User tbaltzakis
+            IdentityFile ~/.ssh/pi_key
+            StrictHostKeyChecking no
+          Host omv-3
+            HostName 192.168.1.132
+            User tbaltzakis
+            IdentityFile ~/.ssh/pi_key
+            StrictHostKeyChecking no
+          EOF
+
+      - name: Restart runner service
+        if: ${{ inputs.re_register == false }}
+        run: |
+          ssh ${{ matrix.host }} '
+            set -e
+            RUNNER_HOME="${HOME}/actions-runner"
+            if [ ! -f "${RUNNER_HOME}/svc.sh" ]; then
+              echo "ERROR: runner not installed at ${RUNNER_HOME}" >&2
+              exit 1
+            fi
+            cd "${RUNNER_HOME}"
+            sudo ./svc.sh stop  || true
+            sudo ./svc.sh start
+            echo "Runner service restarted on $(hostname)"
+          '
+
+      - name: Re-register and restart runner
+        if: ${{ inputs.re_register == true }}
+        env:
+          GITHUB_PAT: ${{ secrets.RUNNER_REGISTRATION_PAT }}
+          RUNNER_LABELS: ${{ inputs.runner_labels }}
+        run: |
+          ssh ${{ matrix.host }} "
+            set -e
+            RUNNER_HOME=\"\${HOME}/actions-runner\"
+            RUNNER_LABELS=\"${RUNNER_LABELS}\"
+
+            if [ ! -d \"\${RUNNER_HOME}\" ]; then
+              mkdir -p \"\${RUNNER_HOME}\"
+              cd \"\${RUNNER_HOME}\"
+              # Download latest runner for arm64
+              RUNNER_VERSION=\$(curl -s https://api.github.com/repos/actions/runner/releases/latest | grep tag_name | cut -d'\"' -f4 | sed 's/v//')
+              curl -sLo runner.tar.gz https://github.com/actions/runner/releases/download/v\${RUNNER_VERSION}/actions-runner-linux-arm64-\${RUNNER_VERSION}.tar.gz
+              tar xzf runner.tar.gz && rm runner.tar.gz
+            fi
+
+            cd \"\${RUNNER_HOME}\"
+            # Stop and uninstall existing service if present
+            if [ -f svc.sh ]; then
+              sudo ./svc.sh stop  || true
+              sudo ./svc.sh uninstall || true
+            fi
+
+            # Get fresh registration token
+            REG_TOKEN=\$(curl -sX POST \
+              -H 'Authorization: token ${GITHUB_PAT}' \
+              -H 'Accept: application/vnd.github+json' \
+              https://api.github.com/repos/Themis128/omv-ha/actions/runners/registration-token \
+              | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"token\"])')
+
+            # Configure
+            ./config.sh \
+              --url https://github.com/Themis128/omv-ha \
+              --token \"\${REG_TOKEN}\" \
+              --name \"\$(hostname)\" \
+              --labels \"\${RUNNER_LABELS}\" \
+              --unattended \
+              --replace
+
+            # Install and start service
+            sudo ./svc.sh install
+            sudo ./svc.sh start
+            echo \"Runner re-registered and started on \$(hostname)\"
+          "
+
+      - name: Verify runner is online
+        run: |
+          sleep 10
+          ssh ${{ matrix.host }} '
+            cd "${HOME}/actions-runner"
+            sudo ./svc.sh status
+          '
