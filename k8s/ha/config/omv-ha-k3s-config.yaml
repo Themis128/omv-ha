@@ -5,6 +5,16 @@ tls-san:
   - "192.168.1.200"
   - "192.168.1.130"
 
+# Control-plane only — prevent user workloads from scheduling on this 1 GB node.
+# etcd + apiserver + controller + scheduler consume 500–768 MB idle; no headroom for pods.
+node-taint:
+  - "node-role.kubernetes.io/control-plane:NoSchedule"
+
+# local-storage is node-local, so disabling on omv-ha only is safe.
+# NFS provisioner handles all persistent volumes anyway.
+disable:
+  - local-storage
+
 kube-apiserver-arg:
   - "service-node-port-range=1000-32767"
   - "max-requests-inflight=100"
@@ -28,9 +38,11 @@ kube-scheduler-arg:
   - "kube-api-qps=10"
 
 kubelet-arg:
-  - "max-pods=50"
-  - "eviction-hard=memory.available<150Mi"
-  - "eviction-soft=memory.available<250Mi"
+  - "max-pods=20"
+  - "eviction-hard=memory.available<200Mi"
+  - "eviction-soft=memory.available<300Mi"
   - "eviction-soft-grace-period=memory.available=2m"
-  - "system-reserved=cpu=200m,memory=150Mi"
-  - "kube-reserved=cpu=100m,memory=100Mi"
+  # kube-reserved must account for the full k3s process (etcd + apiserver + controllers).
+  # Previous 100Mi was dangerously low and caused kubelet to over-schedule.
+  - "system-reserved=cpu=200m,memory=200Mi"
+  - "kube-reserved=cpu=200m,memory=300Mi"
