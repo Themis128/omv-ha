@@ -1,0 +1,106 @@
+# cloudflared HA connector — runs on omv-ha as a second connector for the same tunnel.
+# Cloudflare load-balances across both connectors and automatically fails over to this
+# one when the systemd connector on omv-main is unreachable.
+#
+# No DNS changes needed — the existing CNAME records already point to the tunnel.
+#
+# Prerequisites (run once, on any node with cluster access):
+#   kubectl create secret generic cloudflared-credentials \
+#     --namespace cloudless \
+#     --from-file=credentials.json=/etc/cloudflared/a82f24a8-f767-4a59-bc77-1d59ad132be2.json
+#   # Credentials file lives on omv-main at the path above.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+  namespace: cloudless
+data:
+  config.yml: |
+    tunnel: a82f24a8-f767-4a59-bc77-1d59ad132be2
+    credentials-file: /etc/cloudflared/credentials.json
+    protocol: http2
+
+    ingress:
+      - hostname: cloudless.online
+        service: https://192.168.1.200:18443
+        originRequest:
+          noTLSVerify: true
+      - hostname: "*.cloudless.online"
+        service: https://192.168.1.200:18443
+        originRequest:
+          noTLSVerify: true
+      - service: http_status:404
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared-ha
+  namespace: cloudless
+  labels:
+    app: cloudflared-ha
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflared-ha
+  template:
+    metadata:
+      labels:
+        app: cloudflared-ha
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: omv-ha
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2025.4.1
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --config
+            - /etc/cloudflared/config.yml
+            - run
+          ports:
+            - name: metrics
+              containerPort: 2000
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: 2000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cloudflared/config.yml
+              subPath: config.yml
+              readOnly: true
+            - name: credentials
+              mountPath: /etc/cloudflared/credentials.json
+              subPath: credentials.json
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: cloudflared-config
+        - name: credentials
+          secret:
+            secretName: cloudflared-credentials

@@ -1,18 +1,49 @@
 # Cloudflare Tunnel — cloudless.online
 
 Bypasses CGNAT (ISP WAN 100.80.158.201 is in 100.64.0.0/10) by creating an outbound
-tunnel from omv-main to Cloudflare's edge. No port forwarding needed.
+tunnel from the Pi cluster to Cloudflare's edge. No port forwarding needed.
 
 ## Architecture
 
 ```
 Internet
-  └── Cloudflare Edge (QUIC/HTTP2 tunnel)
-        └── cloudflared on omv-main (192.168.1.128)
+  └── Cloudflare Edge (QUIC/HTTP2 tunnel — tunnel ID a82f24a8)
+        ├── cloudflared on omv-main (192.168.1.128) — systemd service [primary]
+        └── cloudflared-ha pod on omv-ha (192.168.1.130) — k8s Deployment  [failover]
               └── Traefik LoadBalancer VIP (192.168.1.200:18443)
                     ├── cloudless.online      → cloudless-app (Next.js)
                     ├── www.cloudless.online  → cloudless-app (Next.js)
                     └── auth.cloudless.online → keycloak
+```
+
+Both connectors run the same tunnel. Cloudflare automatically routes traffic through
+whichever connectors are healthy — if omv-main goes down, traffic flows via omv-ha
+within seconds, with no DNS changes required.
+
+## HA connector setup (omv-ha)
+
+The `k8s/cloudless/cloudflared-ha.yaml` manifest runs a second connector as a k8s
+Deployment on omv-ha. It tolerates the `control-plane:NoSchedule` taint so it can
+schedule on the HA node.
+
+**Deploy once:**
+```bash
+# 1. Copy tunnel credentials from omv-main
+kubectl create secret generic cloudflared-credentials \
+  --namespace cloudless \
+  --from-file=credentials.json=/etc/cloudflared/a82f24a8-f767-4a59-bc77-1d59ad132be2.json
+
+# 2. Apply the manifest
+kubectl apply -f k8s/cloudless/cloudflared-ha.yaml
+
+# 3. Verify both connectors appear in Cloudflare dashboard:
+#    dash.cloudflare.com → Zero Trust → Networks → Tunnels → cloudless-tunnel → Connectors
+```
+
+**Check HA connector health:**
+```bash
+kubectl get pods -n cloudless -l app=cloudflared-ha
+kubectl logs -n cloudless -l app=cloudflared-ha --tail=20
 ```
 
 ## Tunnel details
