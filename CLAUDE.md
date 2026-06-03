@@ -12,6 +12,32 @@ Also **update the existing annual review task** "omv-ha PR #13 — annual config
 an invariant that must be checked annually — append to its checklist rather than
 creating a separate task for every small change.
 
+## Available skills and commands
+
+### Slash commands (instant lookup)
+| Command | Purpose |
+|---|---|
+| `/health-check` | Full system: AWS + cluster + tunnel |
+| `/etcd-status` | etcd latency, disk warnings, DB size |
+| `/cluster-nodes` | Node resources, taints, pod distribution |
+| `/cert-check` | cert-manager expiry and renewal status |
+| `/cloudflare-status` | Tunnel connectors, DNS, LB pool health |
+| `/cognito-users` | Search/list/inspect Cognito users |
+| `/cognito-pool-status` | Pool config, app clients, Lambda triggers |
+| `/sync-analytics-now` | Trigger immediate S3→DuckDB sync |
+| `/deploy-maintenance` | Apply maintenance CronJobs to cluster |
+
+### Skills (autonomous agents — invoke via Skill tool)
+| Skill | Purpose | Argument |
+|---|---|---|
+| `analytics-orchestrator` | Full analytics stack check+fix | `check\|fix\|full` |
+| `runner-ops` | GitHub Actions runner fleet health+fix | `check\|fix\|legion` |
+| `manifest-deploy` | Pre-flight validated kubectl apply | `<path> [--dry-run]` |
+| `security-audit` | Repo + cluster credential scan | `repo\|cluster\|full` |
+| `oncall-triage` | Alert investigation + fix playbook | `<alert-name> [--fix]` |
+| `cognito-user-ops` | User lifecycle management | `<action> <email>` |
+| `cognito-app-client` | Auth failure diagnosis + client mgmt | `diagnose\|update-callbacks\|…` |
+
 ## omv-ha node (Pi 4, 1 GB) — annual config checklist
 See Notion task "omv-ha PR #13 — annual config review" (due 2027-06-03) for the full checklist.
 Key invariants to maintain:
