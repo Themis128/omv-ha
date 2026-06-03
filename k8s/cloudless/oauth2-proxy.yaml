@@ -14,17 +14,23 @@ spec:
         app: oauth2-proxy
     spec:
       nodeSelector:
-        kubernetes.io/hostname: omv  # must run on omv-main: Keycloak + Cloudflare tunnel are here
+        kubernetes.io/hostname: omv
       containers:
         - name: oauth2-proxy
           image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
           args:
             - --provider=oidc
-            - --oidc-issuer-url=https://auth.cloudless.online/realms/master
-            - --client-id=cloudless-manager
+            # Cognito OIDC issuer: https://cognito-idp.us-east-1.amazonaws.com/<POOL_ID>
+            # Replace REPLACE_WITH_COGNITO_POOL_ID with actual value from NEXT_PUBLIC_COGNITO_USER_POOL_ID secret
+            - --oidc-issuer-url=https://cognito-idp.us-east-1.amazonaws.com/REPLACE_WITH_COGNITO_POOL_ID
+            # Use a dedicated Cognito app client (confidential, with secret) created for oauth2-proxy.
+            # Do NOT reuse the public Next.js client (NEXT_PUBLIC_COGNITO_CLIENT_ID).
+            # Create: aws cognito-idp create-user-pool-client --client-name cloudless-oauth2-proxy --generate-secret ...
+            - --client-id=REPLACE_WITH_OAUTH2PROXY_COGNITO_CLIENT_ID
             - --redirect-url=https://manage.cloudless.online/oauth2/callback
             - --upstream=http://cloudless-manager.cloudless.svc.cluster.local:3000
             - --http-address=0.0.0.0:4180
+            - --scope=openid email profile
             - --email-domain=*
             - --skip-provider-button=true
             - --cookie-secure=true
