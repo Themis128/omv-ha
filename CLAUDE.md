@@ -52,7 +52,7 @@ Key invariants to maintain:
 ## Automation workflows
 | Workflow | File | Purpose |
 |----------|------|---------|
-| Keycloak removal | `.github/workflows/apply-keycloak-removal.yml` | Create Cognito client, apply oauth2-proxy, delete keycloak ns — needs `TS_OAUTH_*` secrets |
+| Keycloak removal | `.github/workflows/apply-keycloak-removal.yml` | Two-job: `cognito-setup` (AWS OIDC only, no Tailscale) + `cluster-apply` (needs `TS_OAUTH_*` secrets). Run with `apply_cluster=false` first if Tailscale isn't set up yet. |
 | Cloudflare LB | `.github/workflows/provision-cloudflare-lb.yml` | Create active-passive LB via API — needs `CF_LB_API_TOKEN` secret |
 | Tailscale OAuth | `.github/workflows/tailscale-connect.yml` | Reusable workflow for Tailscale in CI — needs `TS_OAUTH_CLIENT_ID` + `TS_OAUTH_SECRET` secrets |
 | AWS key rotation | `.github/workflows/rotate-aws-key.yml` | Rotate IAM keys via OIDC — needs `grant-iam-all.sh` run first |
@@ -81,7 +81,7 @@ gh secret set TS_OAUTH_CLIENT_ID   --body "tskey-client-..."
 gh secret set TS_OAUTH_SECRET      --body "tskey-secret-..."
 ```
 
-**Trigger workflows (after IAM + secrets are in place):**
+**Trigger workflows:**
 ```bash
 # Rotate exposed IAM key (username ses-smtp-prod, key AKIAUBXIAELU5SADA3XL):
 gh workflow run rotate-aws-key.yml \
@@ -89,8 +89,18 @@ gh workflow run rotate-aws-key.yml \
   -f old_key_id=AKIAUBXIAELU5SADA3XL \
   -f dry_run=true   # then re-run with dry_run=false after reviewing output
 
-# Wire oauth2-proxy → Cognito + delete keycloak namespace:
-gh workflow run apply-keycloak-removal.yml
+# Wire oauth2-proxy → Cognito + delete keycloak namespace — STAGED (two passes):
+#
+# Pass 1 — run immediately after grant-iam-all.sh (no Tailscale needed):
+gh workflow run apply-keycloak-removal.yml \
+  -f apply_cluster=false
+# → Cognito client created, CLIENT_ID shown in job summary, secret stored in SSM
+#
+# Pass 2 — after TS_OAUTH_CLIENT_ID + TS_OAUTH_SECRET secrets are set:
+gh workflow run apply-keycloak-removal.yml \
+  -f skip_cognito_client=true \
+  -f cognito_client_id=<CLIENT_ID from pass 1 summary> \
+  -f apply_cluster=true
 
 # Provision Cloudflare active-passive load balancer:
 gh workflow run provision-cloudflare-lb.yml
