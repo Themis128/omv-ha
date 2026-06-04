@@ -5,14 +5,15 @@
 # and that the GitHubActionsOIDC role's trust policy allows any branch/ref in
 # the Themis128/omv-ha repository to call sts:AssumeRoleWithWebIdentity.
 #
-# Covers two failure modes:
+# Covers three failure modes:
 #   1. OIDC provider not yet registered in IAM (creates it)
-#   2. Trust policy scoped too narrowly, e.g. refs/heads/master only (updates it)
+#   2. GitHubActionsOIDC role doesn't exist yet (creates it)
+#   3. Trust policy scoped too narrowly, e.g. refs/heads/master only (updates it)
 #
-# Run ONCE locally before triggering workflows from non-master branches:
+# Self-healing and idempotent — safe to run with no prerequisites.
+#
+# Run ONCE locally before triggering workflows from any branch:
 #   AWS_PROFILE=admin bash k8s/ha/scripts/grant-iam-oidc-trust.sh
-#
-# Safe to re-run — idempotent.
 set -euo pipefail
 
 ROLE_NAME="GitHubActionsOIDC"
@@ -54,10 +55,7 @@ else
   echo "  Created: ${OIDC_PROVIDER_ARN}"
 fi
 
-# ── Step 2: update the role trust policy to allow all refs in the repo ────────
-echo ""
-echo "Updating trust policy for ${ROLE_NAME}..."
-
+# ── Step 2: build the desired trust policy ───────────────────────────────────
 TRUST_POLICY=$(cat <<EOF
 {
   "Version": "2012-10-17",
@@ -82,12 +80,27 @@ TRUST_POLICY=$(cat <<EOF
 EOF
 )
 
-aws iam update-assume-role-policy \
-  --role-name "${ROLE_NAME}" \
-  --policy-document "${TRUST_POLICY}" \
-  --profile "${PROFILE}"
+# ── Step 3: create or update the GitHubActionsOIDC role ──────────────────────
+echo ""
+echo "Checking IAM role '${ROLE_NAME}'..."
+if aws iam get-role --role-name "${ROLE_NAME}" --profile "${PROFILE}" &>/dev/null; then
+  echo "  Role exists — updating trust policy..."
+  aws iam update-assume-role-policy \
+    --role-name "${ROLE_NAME}" \
+    --policy-document "${TRUST_POLICY}" \
+    --profile "${PROFILE}"
+  echo "  Trust policy updated: ${ROLE_NAME} now accepts any ref in ${REPO}"
+else
+  echo "  Role not found — creating ${ROLE_NAME}..."
+  aws iam create-role \
+    --role-name "${ROLE_NAME}" \
+    --assume-role-policy-document "${TRUST_POLICY}" \
+    --description "Assumed by GitHub Actions OIDC from ${REPO}" \
+    --profile "${PROFILE}"
+  echo "  Created: arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
+  echo "  Run grant-iam-all.sh to attach the required inline policies."
+fi
 
-echo "  Trust policy updated: ${ROLE_NAME} now accepts any ref in ${REPO}"
 echo ""
 echo "Verify with:"
 echo "  aws iam get-role --role-name ${ROLE_NAME} --query 'Role.AssumeRolePolicyDocument' --output json --profile ${PROFILE}"
