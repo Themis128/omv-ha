@@ -19,6 +19,8 @@ ROLE_NAME="GitHubActionsOIDC"
 POLICY_NAME="CognitoOauth2ProxySetup"
 ACCOUNT_ID="278585680617"
 REGION="us-east-1"
+# PROFILE empty = use ambient credentials (CloudShell, CI); non-empty = named profile
+PROFILE="${AWS_PROFILE:-}"
 
 POLICY_DOCUMENT=$(cat <<EOF
 {
@@ -59,7 +61,7 @@ aws iam put-role-policy \
   --role-name "${ROLE_NAME}" \
   --policy-name "${POLICY_NAME}" \
   --policy-document "${POLICY_DOCUMENT}" \
-  --profile "${AWS_PROFILE:-admin}"
+  ${PROFILE:+--profile "$PROFILE"}
 
 echo "Done. The apply-keycloak-removal.yml workflow can now:"
 echo "  - Read the Cognito pool ID from SSM /cloudless/production/COGNITO_USER_POOL_ID"
@@ -67,4 +69,4 @@ echo "  - List and create Cognito app clients in pool"
 echo "  - Store/read client credentials in SSM /cloudless/production/oauth2-proxy-client-{id,secret}"
 echo ""
 echo "Verify with:"
-echo "  aws iam get-role-policy --role-name ${ROLE_NAME} --policy-name ${POLICY_NAME} --profile ${AWS_PROFILE:-admin}"
+echo "  aws iam get-role-policy --role-name ${ROLE_NAME} --policy-name ${POLICY_NAME} ${PROFILE:+--profile $PROFILE}"

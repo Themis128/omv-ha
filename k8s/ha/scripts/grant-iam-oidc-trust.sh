@@ -12,8 +12,9 @@
 #
 # Self-healing and idempotent — safe to run with no prerequisites.
 #
-# Run ONCE locally before triggering workflows from any branch:
-#   AWS_PROFILE=admin bash k8s/ha/scripts/grant-iam-oidc-trust.sh
+# Usage:
+#   AWS_PROFILE=admin bash k8s/ha/scripts/grant-iam-oidc-trust.sh   # local with named profile
+#   bash grant-iam-oidc-trust.sh                                      # CloudShell / ambient creds
 set -euo pipefail
 
 ROLE_NAME="GitHubActionsOIDC"
@@ -21,13 +22,14 @@ ACCOUNT_ID="278585680617"
 OIDC_URL="https://token.actions.githubusercontent.com"
 OIDC_PROVIDER_ARN="arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
 REPO="Themis128/omv-ha"
-PROFILE="${AWS_PROFILE:-admin}"
+# PROFILE empty = use ambient credentials (CloudShell, CI); non-empty = named profile
+PROFILE="${AWS_PROFILE:-}"
 
 # ── Step 1: ensure the GitHub OIDC identity provider exists ──────────────────
 echo "Checking GitHub OIDC provider..."
 if aws iam get-open-id-connect-provider \
      --open-id-connect-provider-arn "${OIDC_PROVIDER_ARN}" \
-     --profile "${PROFILE}" &>/dev/null; then
+     ${PROFILE:+--profile "$PROFILE"} &>/dev/null; then
   echo "  Provider already exists: ${OIDC_PROVIDER_ARN}"
 else
   echo "  Not found — creating GitHub OIDC provider..."
@@ -50,7 +52,7 @@ else
     --url "${OIDC_URL}" \
     --client-id-list "sts.amazonaws.com" \
     --thumbprint-list "${THUMBPRINT}" \
-    --profile "${PROFILE}"
+    ${PROFILE:+--profile "$PROFILE"}
 
   echo "  Created: ${OIDC_PROVIDER_ARN}"
 fi
@@ -83,12 +85,12 @@ EOF
 # ── Step 3: create or update the GitHubActionsOIDC role ──────────────────────
 echo ""
 echo "Checking IAM role '${ROLE_NAME}'..."
-if aws iam get-role --role-name "${ROLE_NAME}" --profile "${PROFILE}" &>/dev/null; then
+if aws iam get-role --role-name "${ROLE_NAME}" ${PROFILE:+--profile "$PROFILE"} &>/dev/null; then
   echo "  Role exists — updating trust policy..."
   aws iam update-assume-role-policy \
     --role-name "${ROLE_NAME}" \
     --policy-document "${TRUST_POLICY}" \
-    --profile "${PROFILE}"
+    ${PROFILE:+--profile "$PROFILE"}
   echo "  Trust policy updated: ${ROLE_NAME} now accepts any ref in ${REPO}"
 else
   echo "  Role not found — creating ${ROLE_NAME}..."
@@ -96,11 +98,11 @@ else
     --role-name "${ROLE_NAME}" \
     --assume-role-policy-document "${TRUST_POLICY}" \
     --description "Assumed by GitHub Actions OIDC from ${REPO}" \
-    --profile "${PROFILE}"
+    ${PROFILE:+--profile "$PROFILE"}
   echo "  Created: arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
   echo "  Run grant-iam-all.sh to attach the required inline policies."
 fi
 
 echo ""
 echo "Verify with:"
-echo "  aws iam get-role --role-name ${ROLE_NAME} --query 'Role.AssumeRolePolicyDocument' --output json --profile ${PROFILE}"
+echo "  aws iam get-role --role-name ${ROLE_NAME} --query 'Role.AssumeRolePolicyDocument' --output json ${PROFILE:+--profile $PROFILE}"

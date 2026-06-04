@@ -18,7 +18,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROFILE="${AWS_PROFILE:-admin}"
+# PROFILE empty = use ambient credentials (CloudShell, CI); non-empty = named profile
+PROFILE="${AWS_PROFILE:-}"
 
 run_grant() {
   local script="$1"

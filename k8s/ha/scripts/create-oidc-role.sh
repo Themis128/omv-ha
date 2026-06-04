@@ -15,10 +15,10 @@ ROLE_NAME="GitHubActionsOIDC"
 ACCOUNT_ID="278585680617"
 OIDC_PROVIDER_ARN="arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
 REPO="Themis128/omv-ha"
-PROFILE="${AWS_PROFILE:-admin}"
+PROFILE="${AWS_PROFILE:-}"
 
 # Check if role already exists
-if aws iam get-role --role-name "${ROLE_NAME}" --profile "${PROFILE}" &>/dev/null; then
+if aws iam get-role --role-name "${ROLE_NAME}" ${PROFILE:+--profile "$PROFILE"} &>/dev/null; then
   echo "Role '${ROLE_NAME}' already exists — skipping creation."
   echo "To update its trust policy, run: grant-iam-oidc-trust.sh"
   exit 0
@@ -54,7 +54,7 @@ aws iam create-role \
   --role-name "${ROLE_NAME}" \
   --assume-role-policy-document "${TRUST_POLICY}" \
   --description "Assumed by GitHub Actions OIDC from ${REPO}" \
-  --profile "${PROFILE}"
+  ${PROFILE:+--profile "$PROFILE"}
 
 echo "Created: arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
 echo ""
