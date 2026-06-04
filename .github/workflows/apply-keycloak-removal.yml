@@ -134,10 +134,10 @@ jobs:
             --output text 2>/dev/null || true)
 
           if [[ -n "$EXISTING" && "$EXISTING" != "None" ]]; then
-            echo "::error::Client 'cloudless-oauth2-proxy' already exists (ID: $EXISTING)."
-            echo "::error::Re-run with skip_cognito_client=true. The secret is already in SSM:"
-            echo "::error::  /cloudless/production/oauth2-proxy-client-secret"
-            exit 1
+            echo "Client 'cloudless-oauth2-proxy' already exists (ID: $EXISTING) — reusing."
+            echo "Secret already in SSM at /cloudless/production/oauth2-proxy-client-secret"
+            echo "client_id=${EXISTING}" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           CLIENT_JSON=$(aws cognito-idp create-user-pool-client \
