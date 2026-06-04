@@ -20,13 +20,6 @@ spec:
           image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
           args:
             - --provider=oidc
-            # Cognito OIDC issuer: https://cognito-idp.us-east-1.amazonaws.com/<POOL_ID>
-            # Replace REPLACE_WITH_COGNITO_POOL_ID with actual value from NEXT_PUBLIC_COGNITO_USER_POOL_ID secret
-            - --oidc-issuer-url=https://cognito-idp.us-east-1.amazonaws.com/REPLACE_WITH_COGNITO_POOL_ID
-            # Use a dedicated Cognito app client (confidential, with secret) created for oauth2-proxy.
-            # Do NOT reuse the public Next.js client (NEXT_PUBLIC_COGNITO_CLIENT_ID).
-            # Create: aws cognito-idp create-user-pool-client --client-name cloudless-oauth2-proxy --generate-secret ...
-            - --client-id=REPLACE_WITH_OAUTH2PROXY_COGNITO_CLIENT_ID
             - --redirect-url=https://manage.cloudless.online/oauth2/callback
             - --upstream=http://cloudless-manager.cloudless.svc.cluster.local:3000
             - --http-address=0.0.0.0:4180
@@ -36,6 +29,18 @@ spec:
             - --cookie-secure=true
             - --cookie-name=_oauth2_proxy_manager
           env:
+            # Cognito OIDC config — values live in oauth2-proxy-config ConfigMap.
+            # Create with: bash k8s/ha/scripts/setup-oauth2-proxy-cognito.sh
+            - name: OAUTH2_PROXY_OIDC_ISSUER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: oauth2-proxy-config
+                  key: oidc_issuer_url
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: oauth2-proxy-config
+                  key: client_id
             - name: OAUTH2_PROXY_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
