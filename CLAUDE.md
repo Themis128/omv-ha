@@ -26,6 +26,7 @@ creating a separate task for every small change.
 | `/cognito-pool-status` | Pool config, app clients, Lambda triggers |
 | `/sync-analytics-now` | Trigger immediate S3→DuckDB sync |
 | `/deploy-maintenance` | Apply maintenance CronJobs to cluster |
+| `/public-pages` | Audit cloudless.gr CMS databases (Blog, Cases, Services, FAQs, Testimonials) |
 
 ### Skills (autonomous agents — invoke via Skill tool)
 | Skill | Purpose | Argument |
@@ -37,6 +38,7 @@ creating a separate task for every small change.
 | `oncall-triage` | Alert investigation + fix playbook | `<alert-name> [--fix]` |
 | `cognito-user-ops` | User lifecycle management | `<action> <email>` |
 | `cognito-app-client` | Auth failure diagnosis + client mgmt | `diagnose\|update-callbacks\|…` |
+| `cms-content` | Public CMS content audit + fix AI dashes + publish | `audit\|fix-dashes <db>\|publish <id>\|list <db>` |
 
 ## Cluster node topology (updated 2026-05-24 demotion)
 
