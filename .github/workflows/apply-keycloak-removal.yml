@@ -105,7 +105,7 @@ jobs:
               echo "::error::  aws ssm put-parameter --name /cloudless/production/COGNITO_USER_POOL_ID --value <pool-id> --type String"
               exit 1
             fi
-            echo "Discovered pool — storing in SSM for future runs..."
+            echo "Discovered pool — storing in SSM..."
             aws ssm put-parameter \
               --name /cloudless/production/COGNITO_USER_POOL_ID \
               --value "$POOL_ID" \
