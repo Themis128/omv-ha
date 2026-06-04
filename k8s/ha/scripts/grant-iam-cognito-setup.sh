@@ -39,6 +39,15 @@ POLICY_DOCUMENT=$(cat <<EOF
       "Effect": "Allow",
       "Action": ["ssm:GetParameter"],
       "Resource": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter/cloudless/production/COGNITO_USER_POOL_ID"
+    },
+    {
+      "Sid": "SsmClientSecretStorage",
+      "Effect": "Allow",
+      "Action": ["ssm:PutParameter", "ssm:GetParameter"],
+      "Resource": [
+        "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter/cloudless/production/oauth2-proxy-client-id",
+        "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter/cloudless/production/oauth2-proxy-client-secret"
+      ]
     }
   ]
 }
@@ -55,6 +64,7 @@ aws iam put-role-policy \
 echo "Done. The apply-keycloak-removal.yml workflow can now:"
 echo "  - Read the Cognito pool ID from SSM /cloudless/production/COGNITO_USER_POOL_ID"
 echo "  - List and create Cognito app clients in pool"
+echo "  - Store/read client credentials in SSM /cloudless/production/oauth2-proxy-client-{id,secret}"
 echo ""
 echo "Verify with:"
 echo "  aws iam get-role-policy --role-name ${ROLE_NAME} --policy-name ${POLICY_NAME} --profile ${AWS_PROFILE:-admin}"

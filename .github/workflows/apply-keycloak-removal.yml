@@ -1,62 +1,67 @@
 name: Apply Keycloak Removal
 
-# Automates the remaining live-cluster steps for the Keycloak → Cognito migration:
-#   1. Creates the Cognito confidential app client for oauth2-proxy (or reuses existing)
-#   2. Creates k8s ConfigMap (oauth2-proxy-config) and Secret (oauth2-proxy-secret)
-#   3. Applies k8s/cloudless/oauth2-proxy.yaml and waits for rollout
-#   4. Deletes the keycloak namespace
+# Automates the Keycloak → Cognito migration in two independent jobs:
 #
-# Prerequisites (must be done BEFORE first run):
-#   a) Run locally: AWS_PROFILE=admin bash k8s/ha/scripts/grant-iam-cognito-setup.sh
-#      (adds Cognito + SSM read permissions to the GitHubActionsOIDC role)
+#   Job 1 — cognito-setup (AWS OIDC only, no Tailscale needed):
+#     Creates the Cognito confidential app client for oauth2-proxy and stores
+#     the CLIENT_ID + CLIENT_SECRET in SSM Parameter Store for use by job 2.
 #
-#   b) Set GitHub secrets:
+#   Job 2 — cluster-apply (needs Tailscale to reach the k3s cluster):
+#     Reads credentials from SSM, creates k8s ConfigMap + Secret, applies
+#     oauth2-proxy.yaml, restarts the deployment, and deletes the keycloak namespace.
+#
+# Prerequisites:
+#   a) Run locally: AWS_PROFILE=admin bash k8s/ha/scripts/grant-iam-all.sh
+#      (grants OIDC role all required IAM permissions including SSM write)
+#
+#   b) To run cluster-apply, also set:
 #      gh secret set TS_OAUTH_CLIENT_ID  --body "tskey-client-..."
 #      gh secret set TS_OAUTH_SECRET     --body "tskey-secret-..."
-#      (Tailscale OAuth client with auth_keys scope — see tailscale-connect.yml)
+#      gh secret set PI_SSH_KEY          --body "$(cat ~/.ssh/pi_key)"
 #
-#   c) Ensure PI_SSH_KEY has SSH access to `omv` via Tailscale hostname.
-#      (Same key used for omv-2/omv-3 in restart-pi-runners.yml)
-#
-# Re-run when client already exists (AWS won't return the secret again):
-#   1. Set repo secret: gh secret set COGNITO_OAUTH2_PROXY_CLIENT_SECRET --body "<secret>"
-#   2. Re-run with skip_cognito_client=true and provide the existing cognito_client_id
+# Staged workflow — run in two passes when Tailscale isn't set up yet:
+#   Pass 1: trigger with apply_cluster=false → Cognito client created, secret in SSM
+#   Pass 2: trigger with skip_cognito_client=true + apply_cluster=true → cluster configured
 
 on:
   workflow_dispatch:
     inputs:
       skip_cognito_client:
-        description: "Skip Cognito client creation (client already exists)"
+        description: "Skip Cognito client creation (client already exists in SSM)"
         type: boolean
         default: false
       cognito_client_id:
         description: "Existing client ID (only when skip_cognito_client=true)"
         type: string
         default: ""
+      apply_cluster:
+        description: "Apply changes to the k8s cluster (requires Tailscale secrets)"
+        type: boolean
+        default: true
       dry_run:
-        description: "Print actions without executing (skip AWS API calls and SSH)"
+        description: "Print actions without executing"
         type: boolean
         default: false
 
 jobs:
-  apply:
-    name: Apply Keycloak removal to live cluster
+  # ─── Job 1: AWS-only — no Tailscale needed ────────────────────────────────
+  cognito-setup:
+    name: Create Cognito client + store in SSM
     runs-on: ubuntu-latest
     permissions:
-      id-token: write   # required for OIDC token exchange
+      id-token: write
       contents: read
+    outputs:
+      client_id: ${{ steps.store.outputs.client_id }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Authenticate via OIDC (AWS)
         if: ${{ inputs.dry_run == false }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::278585680617:role/GitHubActionsOIDC
           aws-region: us-east-1
-          role-session-name: keycloak-removal-${{ github.run_id }}
+          role-session-name: keycloak-removal-cognito-${{ github.run_id }}
 
       - name: Resolve Cognito Pool ID from SSM
         id: pool
@@ -71,15 +76,13 @@ jobs:
             --query 'Parameter.Value' --output text)
           echo "::add-mask::${POOL_ID}"
           echo "pool_id=${POOL_ID}" >> "$GITHUB_OUTPUT"
-          echo "Resolved Pool ID (masked)"
 
       - name: Create Cognito app client
         id: cognito
         if: ${{ inputs.skip_cognito_client == false }}
         run: |
           if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-            echo "DRY_RUN: aws cognito-idp list-user-pool-clients ..."
-            echo "DRY_RUN: aws cognito-idp create-user-pool-client --client-name cloudless-oauth2-proxy ..."
+            echo "DRY_RUN: would create Cognito app client 'cloudless-oauth2-proxy'"
             echo "client_id=DRY_RUN_CLIENT_ID" >> "$GITHUB_OUTPUT"
             echo "client_secret=DRY_RUN_SECRET" >> "$GITHUB_OUTPUT"
             exit 0
@@ -94,9 +97,8 @@ jobs:
 
           if [[ -n "$EXISTING" && "$EXISTING" != "None" ]]; then
             echo "::error::Client 'cloudless-oauth2-proxy' already exists (ID: $EXISTING)."
-            echo "::error::AWS does not expose the secret after creation. To reuse this client:"
-            echo "::error::  1. gh secret set COGNITO_OAUTH2_PROXY_CLIENT_SECRET --body '<secret>'"
-            echo "::error::  2. Re-run this workflow with skip_cognito_client=true, cognito_client_id=$EXISTING"
+            echo "::error::Re-run with skip_cognito_client=true. The secret is already in SSM:"
+            echo "::error::  /cloudless/production/oauth2-proxy-client-secret"
             exit 1
           fi
 
@@ -127,7 +129,7 @@ jobs:
           echo "client_secret=${CLIENT_SECRET}" >> "$GITHUB_OUTPUT"
           echo "Created Cognito client: $CLIENT_ID"
 
-      - name: Use existing Cognito client (skip path)
+      - name: Use existing client ID (skip path)
         id: cognito_skip
         if: ${{ inputs.skip_cognito_client == true }}
         run: |
@@ -138,6 +140,118 @@ jobs:
           fi
           echo "client_id=${CLIENT_ID}" >> "$GITHUB_OUTPUT"
           echo "Using existing client: $CLIENT_ID"
+
+      - name: Store client credentials in SSM
+        id: store
+        run: |
+          CLIENT_ID="${{ inputs.skip_cognito_client == true && steps.cognito_skip.outputs.client_id || steps.cognito.outputs.client_id }}"
+          CLIENT_SECRET="${{ steps.cognito.outputs.client_secret }}"
+
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            echo "DRY_RUN: ssm put-parameter /cloudless/production/oauth2-proxy-client-id = $CLIENT_ID"
+            echo "DRY_RUN: ssm put-parameter /cloudless/production/oauth2-proxy-client-secret = ***"
+            echo "client_id=${CLIENT_ID}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          aws ssm put-parameter \
+            --name /cloudless/production/oauth2-proxy-client-id \
+            --value "$CLIENT_ID" \
+            --type String \
+            --overwrite
+
+          if [[ -n "$CLIENT_SECRET" ]]; then
+            aws ssm put-parameter \
+              --name /cloudless/production/oauth2-proxy-client-secret \
+              --value "$CLIENT_SECRET" \
+              --type SecureString \
+              --overwrite
+            echo "Stored client secret in SSM (SecureString)"
+          else
+            echo "No new client secret (skip path) — existing SSM value preserved"
+          fi
+
+          echo "client_id=${CLIENT_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Job 1 summary
+        run: |
+          CLIENT_ID="${{ steps.store.outputs.client_id }}"
+          POOL_ID="${{ steps.pool.outputs.pool_id }}"
+          OIDC_URL="https://cognito-idp.us-east-1.amazonaws.com/${POOL_ID}"
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## cognito-setup — complete
+
+          | Item | Value |
+          |------|-------|
+          | Cognito Client ID | \`${CLIENT_ID}\` |
+          | OIDC Issuer URL | \`${OIDC_URL}\` |
+          | Client secret | Stored in SSM \`/cloudless/production/oauth2-proxy-client-secret\` |
+
+          ### Next step — apply to cluster
+          If Tailscale secrets are set, re-trigger this workflow with:
+          - \`skip_cognito_client = true\`
+          - \`cognito_client_id = ${CLIENT_ID}\`
+          - \`apply_cluster = true\`
+          EOF
+
+  # ─── Job 2: Cluster apply — requires Tailscale ────────────────────────────
+  cluster-apply:
+    name: Apply changes to k8s cluster
+    runs-on: ubuntu-latest
+    needs: [cognito-setup]
+    if: ${{ inputs.apply_cluster == true }}
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate via OIDC (AWS) — needed to read SSM
+        if: ${{ inputs.dry_run == false }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::278585680617:role/GitHubActionsOIDC
+          aws-region: us-east-1
+          role-session-name: keycloak-removal-cluster-${{ github.run_id }}
+
+      - name: Read client credentials from SSM
+        id: creds
+        run: |
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            echo "DRY_RUN: reading from SSM"
+            echo "client_id=DRY_RUN_CLIENT_ID" >> "$GITHUB_OUTPUT"
+            echo "client_secret=DRY_RUN_SECRET" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CLIENT_ID=$(aws ssm get-parameter \
+            --name /cloudless/production/oauth2-proxy-client-id \
+            --query 'Parameter.Value' --output text)
+
+          CLIENT_SECRET=$(aws ssm get-parameter \
+            --name /cloudless/production/oauth2-proxy-client-secret \
+            --with-decryption \
+            --query 'Parameter.Value' --output text)
+
+          echo "::add-mask::${CLIENT_SECRET}"
+          echo "client_id=${CLIENT_ID}" >> "$GITHUB_OUTPUT"
+          echo "client_secret=${CLIENT_SECRET}" >> "$GITHUB_OUTPUT"
+
+      - name: Read Pool ID from SSM
+        id: pool
+        run: |
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            echo "pool_id=us-east-1_DRYRUN" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          POOL_ID=$(aws ssm get-parameter \
+            --name /cloudless/production/COGNITO_USER_POOL_ID \
+            --query 'Parameter.Value' --output text)
+          echo "::add-mask::${POOL_ID}"
+          echo "pool_id=${POOL_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Connect to Tailscale
         if: ${{ inputs.dry_run == false }}
@@ -169,8 +283,8 @@ jobs:
 
       - name: Apply cluster changes via SSH
         env:
-          CLIENT_ID: ${{ inputs.skip_cognito_client == true && steps.cognito_skip.outputs.client_id || steps.cognito.outputs.client_id }}
-          CLIENT_SECRET: ${{ inputs.skip_cognito_client == true && secrets.COGNITO_OAUTH2_PROXY_CLIENT_SECRET || steps.cognito.outputs.client_secret }}
+          CLIENT_ID: ${{ steps.creds.outputs.client_id }}
+          CLIENT_SECRET: ${{ steps.creds.outputs.client_secret }}
           POOL_ID: ${{ steps.pool.outputs.pool_id }}
         run: |
           if [[ "${{ inputs.dry_run }}" == "true" ]]; then
@@ -187,14 +301,11 @@ jobs:
           OIDC_ISSUER_URL="https://cognito-idp.us-east-1.amazonaws.com/${POOL_ID}"
           COGNITO_DOMAIN="https://cloudless-auth.auth.us-east-1.amazoncognito.com"
 
-          # Pass values into the remote shell via environment injection in the SSH command.
-          # CLIENT_SECRET is masked in GH Actions logs and never written to disk on the Pi.
           ssh tbaltzakis@omv \
             "CLIENT_ID='${CLIENT_ID}' CLIENT_SECRET='${CLIENT_SECRET}' OIDC_ISSUER_URL='${OIDC_ISSUER_URL}' COGNITO_DOMAIN='${COGNITO_DOMAIN}' bash -s" \
             << 'REMOTE'
           set -euo pipefail
 
-          # Preserve existing cookie secret (avoids invalidating all user sessions)
           EXISTING_COOKIE=$(kubectl get secret oauth2-proxy-secret -n cloudless \
             -o jsonpath='{.data.cookie-secret}' 2>/dev/null | base64 -d 2>/dev/null || true)
           if [[ -n "$EXISTING_COOKIE" ]]; then
@@ -230,24 +341,21 @@ jobs:
           echo "Done."
           REMOTE
 
-      - name: Job summary
+      - name: Job 2 summary
         if: always()
         run: |
-          POOL_ID="${{ steps.pool.outputs.pool_id }}"
-          CLIENT_ID="${{ inputs.skip_cognito_client == true && steps.cognito_skip.outputs.client_id || steps.cognito.outputs.client_id }}"
-          OIDC_URL="https://cognito-idp.us-east-1.amazonaws.com/${POOL_ID}"
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## cluster-apply — complete
 
-          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
-          ## Keycloak Removal — Result
+          ### Verify
+          ```bash
+          kubectl get pods -n cloudless -l app=oauth2-proxy    # Running
+          kubectl get namespace keycloak                        # NotFound
+          curl -I https://manage.cloudless.online               # 302 → Cognito
+          ```
 
-          | Item | Value |
-          |------|-------|
-          | OIDC Issuer URL | \`${OIDC_URL}\` |
-          | Cognito Client ID | \`${CLIENT_ID}\` |
-          | Dry run | ${{ inputs.dry_run }} |
-
-          ### Next steps
-          1. Verify login: <https://manage.cloudless.online> (should redirect to Cognito)
-          2. Remove \`auth.cloudless.online\` CNAME from Cloudflare dashboard
+          ### Remaining manual steps
+          1. Browser-verify login at <https://manage.cloudless.online>
+          2. Remove `auth.cloudless.online` CNAME from Cloudflare dashboard
           3. Merge PR #14
           EOF
