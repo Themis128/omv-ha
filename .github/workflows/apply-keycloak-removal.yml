@@ -42,6 +42,13 @@ on:
         description: "Print actions without executing"
         type: boolean
         default: false
+  push:
+    branches:
+      - claude/node-architecture-research-fuYGh
+    paths:
+      - ".github/workflows/apply-keycloak-removal.yml"
+      - "k8s/cloudless/oauth2-proxy.yaml"
+      - "k8s/ha/scripts/grant-iam-cognito-setup.sh"
 
 jobs:
   # ─── Job 1: AWS-only — no Tailscale needed ────────────────────────────────
@@ -200,7 +207,7 @@ jobs:
     name: Apply changes to k8s cluster
     runs-on: ubuntu-latest
     needs: [cognito-setup]
-    if: ${{ inputs.apply_cluster == true }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply_cluster == true }}
     permissions:
       id-token: write
       contents: read
