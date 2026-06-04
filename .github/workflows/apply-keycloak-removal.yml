@@ -93,7 +93,25 @@ jobs:
           fi
           POOL_ID=$(aws ssm get-parameter \
             --name /cloudless/production/COGNITO_USER_POOL_ID \
-            --query 'Parameter.Value' --output text)
+            --query 'Parameter.Value' --output text 2>/dev/null || true)
+
+          if [[ -z "$POOL_ID" || "$POOL_ID" == "None" ]]; then
+            echo "SSM parameter not found — discovering from Cognito..."
+            POOL_ID=$(aws cognito-idp list-user-pools --max-results 60 \
+              --query "UserPools[?contains(Name,'cloudless')].Id | [0]" \
+              --output text)
+            if [[ -z "$POOL_ID" || "$POOL_ID" == "None" ]]; then
+              echo "::error::No Cognito pool matching 'cloudless' found. Create SSM param manually:"
+              echo "::error::  aws ssm put-parameter --name /cloudless/production/COGNITO_USER_POOL_ID --value <pool-id> --type String"
+              exit 1
+            fi
+            echo "Discovered pool — storing in SSM for future runs..."
+            aws ssm put-parameter \
+              --name /cloudless/production/COGNITO_USER_POOL_ID \
+              --value "$POOL_ID" \
+              --type String
+          fi
+
           echo "::add-mask::${POOL_ID}"
           echo "pool_id=${POOL_ID}" >> "$GITHUB_OUTPUT"
 

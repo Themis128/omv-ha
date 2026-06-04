@@ -30,16 +30,17 @@ POLICY_DOCUMENT=$(cat <<EOF
       "Sid": "CognitoClientManagement",
       "Effect": "Allow",
       "Action": [
+        "cognito-idp:ListUserPools",
         "cognito-idp:ListUserPoolClients",
         "cognito-idp:CreateUserPoolClient",
         "cognito-idp:DescribeUserPoolClient"
       ],
-      "Resource": "arn:aws:cognito-idp:${REGION}:${ACCOUNT_ID}:userpool/*"
+      "Resource": "*"
     },
     {
-      "Sid": "SsmPoolIdRead",
+      "Sid": "SsmPoolIdReadWrite",
       "Effect": "Allow",
-      "Action": ["ssm:GetParameter"],
+      "Action": ["ssm:GetParameter", "ssm:PutParameter"],
       "Resource": "arn:aws:ssm:${REGION}:${ACCOUNT_ID}:parameter/cloudless/production/COGNITO_USER_POOL_ID"
     },
     {
