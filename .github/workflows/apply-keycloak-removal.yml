@@ -1,4 +1,4 @@
-name: Apply Keycloak Removal
+name: Apply Keycloak Removal  # retrigger after IAM trust fix
 
 # Automates the Keycloak → Cognito migration in two independent jobs:
 #
