@@ -10,7 +10,7 @@
 #   2. GitHubActionsOIDC role doesn't exist yet (creates it)
 #   3. Trust policy scoped too narrowly, e.g. refs/heads/master only (updates it)
 #
-# Self-healing and idempotent — safe to run with no prerequisites.
+# Self-healing and idempotent — safe to run with no prerequisites. CloudShell-compatible.
 #
 # Usage:
 #   AWS_PROFILE=admin bash k8s/ha/scripts/grant-iam-oidc-trust.sh   # local with named profile
