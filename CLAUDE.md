@@ -49,20 +49,52 @@ Key invariants to maintain:
 - `disable: local-storage` must NOT appear in omv-ha k3s config (breaks local-path-provisioner HA)
 - `cloudflared-ha` deployment must stay in `cloudless` namespace (second tunnel connector for HA)
 
-## Automation workflows (added PR #13, 2026-06-03)
+## Automation workflows
 | Workflow | File | Purpose |
 |----------|------|---------|
+| Keycloak removal | `.github/workflows/apply-keycloak-removal.yml` | Create Cognito client, apply oauth2-proxy, delete keycloak ns — needs `TS_OAUTH_*` secrets |
 | Cloudflare LB | `.github/workflows/provision-cloudflare-lb.yml` | Create active-passive LB via API — needs `CF_LB_API_TOKEN` secret |
 | Tailscale OAuth | `.github/workflows/tailscale-connect.yml` | Reusable workflow for Tailscale in CI — needs `TS_OAUTH_CLIENT_ID` + `TS_OAUTH_SECRET` secrets |
-| AWS key rotation | `.github/workflows/rotate-aws-key.yml` | Rotate IAM keys via OIDC — needs `grant-iam-key-rotation.sh` run first |
+| AWS key rotation | `.github/workflows/rotate-aws-key.yml` | Rotate IAM keys via OIDC — needs `grant-iam-all.sh` run first |
 | Pi runner restart | `.github/workflows/restart-pi-runners.yml` | Restart/re-register self-hosted runners on omv-2/omv-3 |
 
-## Pending manual credential steps (tracked in Notion task "omv-ha infra — complete 5 manual credential/provider steps")
-1. Revoke exposed Cloudflare API token `cfut_ulgWeq...` in dashboard — create replacement with `Zone:DNS:Edit`
-2. Rotate AWS IAM key `AKIAUBXIAELU5SADA3XL` — run `rotate-aws-key.yml` workflow (run `grant-iam-key-rotation.sh` first)
-3. Create Cloudflare LB API token (`Load Balancers:Edit` + `Monitors and Pools:Edit`) → set `CF_LB_API_TOKEN` secret → run `provision-cloudflare-lb.yml`
-4. Create Tailscale OAuth client (`auth_keys` scope) → `gh secret set TS_OAUTH_CLIENT_ID` + `TS_OAUTH_SECRET`
-5. Run `AWS_PROFILE=admin bash k8s/ha/scripts/grant-iam-create-user.sh` (SES SMTP IAM policy)
+## Pending credential / provisioning steps
+
+**One-time local setup (needs `AWS_PROFILE=admin`):**
+```bash
+# Grants all workflow IAM permissions in one shot:
+AWS_PROFILE=admin bash k8s/ha/scripts/grant-iam-all.sh
+```
+
+**Browser actions (Cloudflare dashboard):**
+- Revoke exposed token `cfut_ulgWeq...` → create replacement with `Zone:DNS:Edit` scope
+- Create LB API token (`Load Balancers:Edit` + `Monitors and Pools:Edit`)
+- Remove `auth.cloudless.online` CNAME (after Keycloak removal verified)
+
+**Browser action (Tailscale admin):**
+- Create OAuth client with `auth_keys` scope → note Client ID + Secret
+
+**Set GitHub secrets (after browser steps):**
+```bash
+gh secret set CF_LB_API_TOKEN      --body "..."
+gh secret set TS_OAUTH_CLIENT_ID   --body "tskey-client-..."
+gh secret set TS_OAUTH_SECRET      --body "tskey-secret-..."
+```
+
+**Trigger workflows (after IAM + secrets are in place):**
+```bash
+# Rotate exposed IAM key (username ses-smtp-prod, key AKIAUBXIAELU5SADA3XL):
+gh workflow run rotate-aws-key.yml \
+  -f iam_username=ses-smtp-prod \
+  -f old_key_id=AKIAUBXIAELU5SADA3XL \
+  -f dry_run=true   # then re-run with dry_run=false after reviewing output
+
+# Wire oauth2-proxy → Cognito + delete keycloak namespace:
+gh workflow run apply-keycloak-removal.yml
+
+# Provision Cloudflare active-passive load balancer:
+gh workflow run provision-cloudflare-lb.yml
+```
 
 ## Git history
 - Exposed Cloudflare token scrubbed from all history via `git filter-repo` on 2026-06-03 (PR #13 branch)
