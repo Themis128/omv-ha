@@ -60,50 +60,39 @@ Key invariants to maintain:
 
 ## Pending credential / provisioning steps
 
-**One-time local setup (needs `AWS_PROFILE=admin`):**
+**One-time local setup — ✅ DONE (run from AWS CloudShell 2026-06-04):**
 ```bash
-# Grants all workflow IAM permissions in one shot:
-AWS_PROFILE=admin bash k8s/ha/scripts/grant-iam-all.sh
+# All workflow IAM permissions granted:
+bash k8s/ha/scripts/grant-iam-all.sh   # CloudShell-compatible (no --profile needed)
 ```
 
-**Browser actions (Cloudflare dashboard):**
+**apply-keycloak-removal.yml status:**
+- ✅ Pass 1 COMPLETE — Cognito client `cloudless-oauth2-proxy` (ID: `63d3fu5lp057694h0t70je4jk0`) exists; secret stored in SSM `/cloudless/production/oauth2-proxy-client-secret`
+- ⏸ Pass 2 DEFERRED — `cluster-apply` job needs Tailscale secrets; also `cloudless.online` domain is gone (2026-06-04), making oauth2-proxy deployment moot until domain/app is restored. Delete keycloak namespace manually when SSH access is available.
+
+**Still pending (Cloudflare dashboard):**
 - Revoke exposed token `cfut_ulgWeq...` → create replacement with `Zone:DNS:Edit` scope
-- Create LB API token (`Load Balancers:Edit` + `Monitors and Pools:Edit`)
-- Remove `auth.cloudless.online` CNAME (after Keycloak removal verified)
+- Create LB API token (`Load Balancers:Edit` + `Monitors and Pools:Edit`) — hold until new domain/app decided
 
-**Browser action (Tailscale admin):**
-- Create OAuth client with `auth_keys` scope → note Client ID + Secret
-
-**Set GitHub secrets (after browser steps):**
+**Rotate exposed IAM key (still needed):**
 ```bash
-gh secret set CF_LB_API_TOKEN      --body "..."
-gh secret set TS_OAUTH_CLIENT_ID   --body "tskey-client-..."
-gh secret set TS_OAUTH_SECRET      --body "tskey-secret-..."
-```
-
-**Trigger workflows:**
-```bash
-# Rotate exposed IAM key (username ses-smtp-prod, key AKIAUBXIAELU5SADA3XL):
+# Dry-run first, then re-run with dry_run=false:
 gh workflow run rotate-aws-key.yml \
   -f iam_username=ses-smtp-prod \
   -f old_key_id=AKIAUBXIAELU5SADA3XL \
-  -f dry_run=true   # then re-run with dry_run=false after reviewing output
+  -f dry_run=true
+```
 
-# Wire oauth2-proxy → Cognito + delete keycloak namespace — STAGED (two passes):
-#
-# Pass 1 — run immediately after grant-iam-all.sh (no Tailscale needed):
-gh workflow run apply-keycloak-removal.yml \
-  -f apply_cluster=false
-# → Cognito client created, CLIENT_ID shown in job summary, secret stored in SSM
-#
-# Pass 2 — after TS_OAUTH_CLIENT_ID + TS_OAUTH_SECRET secrets are set:
+**Tailscale OAuth (only needed when cluster SSH access via CI is required):**
+- Create OAuth client at admin.tailscale.com → Settings → OAuth clients (`auth_keys` scope)
+- `gh secret set TS_OAUTH_CLIENT_ID --body "tskey-client-..."` + `TS_OAUTH_SECRET`
+
+**cluster-apply Pass 2 (deferred — needs Tailscale + active domain/app):**
+```bash
 gh workflow run apply-keycloak-removal.yml \
   -f skip_cognito_client=true \
-  -f cognito_client_id=<CLIENT_ID from pass 1 summary> \
+  -f cognito_client_id=63d3fu5lp057694h0t70je4jk0 \
   -f apply_cluster=true
-
-# Provision Cloudflare active-passive load balancer:
-gh workflow run provision-cloudflare-lb.yml
 ```
 
 ## Git history
