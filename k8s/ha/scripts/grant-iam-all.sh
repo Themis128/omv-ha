@@ -6,6 +6,7 @@
 # before running the automation workflows for the first time.
 #
 # Scripts run (idempotent — safe to re-run):
+#   0. grant-iam-oidc-trust.sh     → broadens trust policy to all branches in this repo
 #   1. grant-iam-key-rotation.sh   → enables rotate-aws-key.yml
 #   2. grant-iam-create-user.sh    → enables SES SMTP user provisioning
 #   3. grant-iam-cognito-setup.sh  → enables apply-keycloak-removal.yml
@@ -27,9 +28,10 @@ run_grant() {
   AWS_PROFILE="$PROFILE" bash "${SCRIPT_DIR}/${script}"
 }
 
-run_grant "grant-iam-key-rotation.sh"  "1/3  IAM key rotation (rotate-aws-key.yml)"
-run_grant "grant-iam-create-user.sh"   "2/3  SES SMTP user management"
-run_grant "grant-iam-cognito-setup.sh" "3/3  Cognito oauth2-proxy setup (apply-keycloak-removal.yml)"
+run_grant "grant-iam-oidc-trust.sh"    "0/4  OIDC trust policy (allow all branches in repo)"
+run_grant "grant-iam-key-rotation.sh"  "1/4  IAM key rotation (rotate-aws-key.yml)"
+run_grant "grant-iam-create-user.sh"   "2/4  SES SMTP user management"
+run_grant "grant-iam-cognito-setup.sh" "3/4  Cognito oauth2-proxy setup (apply-keycloak-removal.yml)"
 
 echo ""
 echo "════════════════════════════════════════════════════════"

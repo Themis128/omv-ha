@@ -49,6 +49,7 @@ on:
       - ".github/workflows/apply-keycloak-removal.yml"
       - "k8s/cloudless/oauth2-proxy.yaml"
       - "k8s/ha/scripts/grant-iam-cognito-setup.sh"
+      - "k8s/ha/scripts/grant-iam-oidc-trust.sh"
 
 jobs:
   # ─── Job 1: AWS-only — no Tailscale needed ────────────────────────────────
