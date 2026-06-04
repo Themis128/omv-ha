@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # grant-iam-all.sh
 #
-# Grants all IAM permissions required by the GitHub Actions workflows in this repo
-# to the GitHubActionsOIDC role. Run ONCE from a machine with admin AWS credentials
-# before running the automation workflows for the first time.
+# Full one-shot IAM setup for GitHub Actions OIDC in this repo.
+# Run ONCE from a machine with admin AWS credentials.
+#
+# If the GitHubActionsOIDC role doesn't exist yet, create it first:
+#   AWS_PROFILE=admin bash k8s/ha/scripts/create-oidc-role.sh
 #
 # Scripts run (idempotent — safe to re-run):
-#   0. grant-iam-oidc-trust.sh     → broadens trust policy to all branches in this repo
+#   0. grant-iam-oidc-trust.sh     → creates GitHub OIDC provider (if missing) + broadens trust policy to all branches
 #   1. grant-iam-key-rotation.sh   → enables rotate-aws-key.yml
 #   2. grant-iam-create-user.sh    → enables SES SMTP user provisioning
 #   3. grant-iam-cognito-setup.sh  → enables apply-keycloak-removal.yml
