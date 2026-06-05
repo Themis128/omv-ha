@@ -19,15 +19,15 @@ allowed-tools: >
 Manages cloudless.gr public content stored in Notion. All databases are in the
 `Themis128/Cloudless` workspace.
 
-## Known database IDs
+## Known database IDs (all verified 2026-06-05)
 
-| Section | Notion DB ID |
-|---|---|
-| Blog | `c1c75072-3b39-424a-913f-494160e40568` |
-| Case Studies | `de8123dd-b8e9-4b79-b878-ece271d59b1b` |
-| Testimonials | `157ceb35-d0b4-4661-a6c6-7798f6d87e7b` |
-
-Services and FAQs: search via `notion-search` if ID not yet known.
+| Section | DB page ID | View ID | Collection ID |
+|---|---|---|---|
+| Blog | `87ac6db3-b82e-4df9-844a-42abbc16a578` | `view://b7acdcd0-1012-454e-906b-022c57288057` | `c1c75072-3b39-424a-913f-494160e40568` |
+| Case Studies | `7c50dc2a-0305-4f4a-81f8-5b0a251ac4d7` | `view://3055864d-3933-4ecd-a8be-9a88fac1cbbb` | `de8123dd-b8e9-4b79-b878-ece271d59b1b` |
+| Testimonials | `157ceb35-d0b4-4661-a6c6-7798f6d87e7b` | `view://f6a855cb-a5f0-40bb-b02a-e2f0b52b0c6b` | `6b41763f-b91d-4a43-913d-fc6cd02083f4` |
+| FAQs | `316acfca-94f4-44d3-8c85-7aa765c259a2` | `view://d2e109df-2a8e-4340-b174-0096408d8ca1` | `c8b95f20-9357-4ec5-95ab-1af14ce0684f` |
+| Services | `98a4087c-8670-4818-a1dd-e515104c2331` | `view://50f59233-949f-4c4a-8a7e-4f2ce6623795` | `f440363e-054d-45b5-9aa1-c86468fd7927` |
 
 ## Step 0 — Argument routing
 
@@ -43,11 +43,17 @@ Services and FAQs: search via `notion-search` if ID not yet known.
 For each known DB, call `notion-query-database-view` with the DB ID.
 Extract: `Title`, `Status`, `GeneratedBy` (if present), and any required fields per DB.
 
-**Blog required fields:** Title, Status, GeneratedBy, Slug, PublishedAt
-**Case Studies required fields:** Title, Status, Company, Industry, Results, Summary
-**Testimonials required fields:** Author, Role, Company, Quote, Active
-**Services required fields:** Title, Description, Icon, Status, Order
-**FAQs required fields:** Question, Answer, Category, Published, Order
+**Blog required fields:** Title, Status, GeneratedBy, Slug, PublishedAt (Published checkbox)
+**Case Studies required fields:** Title, Client, Industry, Results, Summary, Published (checkbox)
+**Testimonials required fields:** Name, Role, Company, Quote, Published (checkbox)
+**Services required fields:** Name, Description, Icon, Slug, Price, CTA, Published (checkbox)
+**FAQs required fields:** Question, Answer, Category, Published (checkbox)
+
+Real schema notes (verified 2026-06-05):
+- Case Studies: field is `Client` (not Company); uses `Published` checkbox (not Status select)
+- Testimonials: field is `Name` (not Author); uses `Published` checkbox (not Active)
+- Services: has `Features` (newline-separated), `Price`, `CTA`, `StripePriceId`
+- FAQs: has `Locale` multi-select (en/el/fr/de) — unset items show for all locales
 
 For Services and FAQs where the DB ID is unknown:
 ```

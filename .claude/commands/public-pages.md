@@ -6,17 +6,13 @@ Snapshot the current state of all cloudless.gr public CMS content in Notion.
 
 Use the Notion MCP tools to query each database. Known database IDs:
 
-| Section | Notion DB ID |
+| Section | Notion DB page ID |
 |---|---|
-| Blog | `c1c75072-3b39-424a-913f-494160e40568` |
-| Case Studies | `de8123dd-b8e9-4b79-b878-ece271d59b1b` |
+| Blog | `87ac6db3-b82e-4df9-844a-42abbc16a578` |
+| Case Studies | `7c50dc2a-0305-4f4a-81f8-5b0a251ac4d7` |
 | Testimonials | `157ceb35-d0b4-4661-a6c6-7798f6d87e7b` |
-
-For Services and FAQs, search first if IDs are unknown:
-```
-notion-search: "Services"
-notion-search: "FAQs"
-```
+| FAQs | `316acfca-94f4-44d3-8c85-7aa765c259a2` |
+| Services | `98a4087c-8670-4818-a1dd-e515104c2331` |
 
 ---
 
@@ -49,61 +45,52 @@ notion-query-database-view:
 ```
 
 Flag:
-- Items with `Status ≠ Published`
-- Items missing `Company`, `Industry`, or `Results` (required for the public card)
+- Items with `Published ≠ true`
+- Items missing `Client`, `Industry`, or `Results` (required for the public card)
 - Short `Results` values (< 20 chars) → likely a placeholder like "- Increased revenue"
+- `CoverImage` empty (cards may render without image but worth flagging)
 
 ---
 
 ## 3. Testimonials
 
-Fetch the Testimonials database or page:
+Fetch the DB then query its view `view://f6a855cb-a5f0-40bb-b02a-e2f0b52b0c6b`.
 
-```
-notion-fetch:
-  url or id: 157ceb35-d0b4-4661-a6c6-7798f6d87e7b
-```
-
-If it is a database, query it for: Author, Role, Company, Quote, Active.
+Fields: Name, Role, Company, Quote, Rating, Published, Avatar, Featured, Order, Service.
 
 Flag:
-- Entries with `Active = false` (or missing)
+- Entries with `Published ≠ true`
 - Quotes that start with `- ` (literal dash from AI generation)
-- Missing Author, Role, or Company
+- Missing Name, Role, Company, or Quote
+- `Avatar` empty (will render initials fallback — flag but not blocking)
 
 ---
 
 ## 4. Services
 
-Search for the Services database, then query it:
+Query view `view://50f59233-949f-4c4a-8a7e-4f2ce6623795`.
 
-```
-notion-search: "Services"  →  find the DB for cloudless.gr public services page
-notion-query-database-view: <services_db_id>
-  properties: Title, Description, Icon, Status, Order
-```
+Fields: Name, Description, Features, Icon, Category, Price, CTA, Slug, Published, Order, StripePriceId.
 
 Flag:
-- Items not marked Active/Published
-- Missing `Description` or `Icon`
-- `Description` values starting with `- ` or `• ` (AI dash formatting)
+- Items with `Published ≠ true`
+- Missing `Description`, `Icon`, or `Slug`
+- `Features` text lines starting with `- ` (AI dash formatting) — newline-only separation is OK
+- `StripePriceId` empty if the CTA routes to Stripe checkout (not just contact form)
 
 ---
 
 ## 5. FAQs
 
-Search for the FAQs database, then query it:
+Query view `view://d2e109df-2a8e-4340-b174-0096408d8ca1`.
 
-```
-notion-search: "FAQ"  →  find the FAQ DB
-notion-query-database-view: <faq_db_id>
-  properties: Question, Answer, Category, Published, Order
-```
+Fields: Question, Answer, Category, Locale, Published, Order.
 
 Flag:
-- Items not published
-- `Answer` values that start with `- ` or contain a line starting with `- ` (AI formatting)
+- Items with `Published ≠ true`
+- `Answer` values starting with `- ` or containing lines starting with `- ` (AI formatting)
 - Missing `Category`
+- `Locale` unset — app may default to showing all items or en-only; verify expected behaviour
 
 ---
 
