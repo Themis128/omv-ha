@@ -7,11 +7,11 @@ Crypto-agility means the system can rotate keys and swap algorithms without down
 | Material | Location | TTL / Rotation trigger |
 |----------|----------|------------------------|
 | k3s secret encryption key (AES-GCM) | `/var/lib/rancher/k3s/server/crypt/` | Manual / on compromise |
-| PostgreSQL TLS cert | cert-manager `postgres-tls` secret | 365d auto (cert-manager) |
-| Cloudless internal CA | cert-manager `cloudless-internal-ca` | 10yr, manual rotation |
 | ECR pull secret (`regcred-ecr`) | `cloudless` namespace | 12h TTL, auto-refreshed every 6h |
 | Sync-webhook HMAC secret (`SYNC_HMAC_SECRET`) | `cloudless-app-config` secret | Manual / on compromise |
 | Cloudflare API token | `cert-manager` secret | Manual / per policy |
+| AWS IAM access key | GitHub Actions secrets | Every 90 days or on exposure |
+| Cognito app client secret (oauth2-proxy) | `oauth2-proxy-secret` k8s secret | Manual / on compromise |
 
 ---
 
@@ -54,61 +54,7 @@ sudo ETCDCTL_API=3 etcdctl \
 
 ---
 
-## 2. PostgreSQL TLS Certificate
-
-cert-manager auto-renews `postgres-tls` 30 days before expiry (`renewBefore: 720h`). The certificate is valid for 365 days (`duration: 8760h`).
-
-### Check cert expiry
-
-```bash
-kubectl get certificate postgres-tls -n keycloak
-# Ready=True, status shows NotAfter date
-
-# Or inspect the actual cert:
-kubectl get secret postgres-tls -n keycloak -o jsonpath='{.data.tls\.crt}' \
-  | base64 -d | openssl x509 -noout -dates
-```
-
-### Force early renewal
-
-```bash
-kubectl delete secret postgres-tls -n keycloak
-# cert-manager detects the missing secret and immediately issues a new cert
-# Watch progress:
-kubectl describe certificate postgres-tls -n keycloak
-```
-
-### Apply new cert to running PostgreSQL
-
-The PostgreSQL pod reads TLS certs on startup only (initContainer copies them). After cert renewal, restart the pod:
-
-```bash
-kubectl rollout restart deployment/postgres -n keycloak
-```
-
----
-
-## 3. Cloudless Internal CA
-
-The self-signed CA (`cloudless-internal-ca`) is valid for 10 years. If it needs to be rotated (compromise or expiry):
-
-```bash
-# 1. Delete the CA secret — cert-manager will regenerate it via the ClusterIssuer
-kubectl delete secret cloudless-internal-ca -n keycloak
-
-# 2. This invalidates all certs signed by the old CA. Force-renew postgres-tls:
-kubectl delete secret postgres-tls -n keycloak
-
-# 3. Restart PostgreSQL so it picks up the new cert
-kubectl rollout restart deployment/postgres -n keycloak
-
-# 4. Restart Keycloak — its DB connection uses the new cert chain
-kubectl rollout restart deployment/keycloak -n keycloak
-```
-
----
-
-## 4. Sync-Webhook HMAC Secret
+## 2. Sync-Webhook HMAC Secret
 
 Used to authenticate `POST /_sync/image` and `POST /_sync/config` requests from GitHub Actions.
 
@@ -136,7 +82,7 @@ kubectl rollout restart deployment/sync-webhook -n cloudless
 
 ---
 
-## 5. ECR Pull Secret
+## 3. ECR Pull Secret
 
 Auto-rotated every 6 hours by `ecr-cred-refresher` CronJob. Manual rotation:
 
@@ -147,7 +93,7 @@ kubectl get secret regcred-ecr -n cloudless  # AGE should reset to <1m
 
 ---
 
-## 6. Cloudflare API Token (cert-manager)
+## 4. Cloudflare API Token (cert-manager)
 
 Used by cert-manager for DNS-01 ACME challenges.
 
@@ -162,7 +108,7 @@ kubectl create secret generic cloudflare-api-token \
 
 ---
 
-## 7. AWS IAM Access Key
+## 5. AWS IAM Access Key
 
 Used by GitHub Actions for deployments (e.g. ECR push, S3 sync, SES). Prefer OIDC over
 long-lived keys — the `GitHubActionsOIDC` role already exists for this purpose.
@@ -206,17 +152,90 @@ aws iam delete-access-key --user-name <username> --access-key-id AKIA...
 
 ---
 
+## 6. Cognito App Client Secret (oauth2-proxy)
+
+`oauth2-proxy` uses a dedicated confidential Cognito app client (separate from the public Next.js client).
+Cognito does not support in-place secret rotation — create a new client and migrate.
+
+### Rotate
+
+```bash
+POOL_ID="<from NEXT_PUBLIC_COGNITO_USER_POOL_ID secret>"
+REGION="us-east-1"
+PROFILE="admin"
+
+# 1. Create a new confidential client
+NEW_CLIENT=$(aws cognito-idp create-user-pool-client \
+  --user-pool-id "$POOL_ID" \
+  --client-name "cloudless-oauth2-proxy-v2" \
+  --generate-secret \
+  --explicit-auth-flows ALLOW_USER_SRP_AUTH ALLOW_REFRESH_TOKEN_AUTH \
+  --allowed-o-auth-flows code \
+  --allowed-o-auth-scopes openid email profile \
+  --allowed-o-auth-flows-user-pool-client \
+  --callback-urls "https://manage.cloudless.online/oauth2/callback" \
+  --logout-urls "https://manage.cloudless.online" \
+  --supported-identity-providers COGNITO \
+  --region "$REGION" --profile "$PROFILE" \
+  | jq '{client_id: .UserPoolClient.ClientId, client_secret: .UserPoolClient.ClientSecret}')
+
+echo "$NEW_CLIENT"  # save both values immediately
+
+NEW_CLIENT_ID=$(echo "$NEW_CLIENT" | jq -r .client_id)
+NEW_CLIENT_SECRET=$(echo "$NEW_CLIENT" | jq -r .client_secret)
+
+# 2. Update the k8s secret
+kubectl create secret generic oauth2-proxy-secret \
+  --from-literal=client-secret="$NEW_CLIENT_SECRET" \
+  --from-literal=cookie-secret="$(kubectl get secret oauth2-proxy-secret -n cloudless -o jsonpath='{.data.cookie-secret}' | base64 -d)" \
+  -n cloudless \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# 3. Update the oauth2-proxy deployment with the new client-id
+kubectl patch deployment oauth2-proxy -n cloudless --type=json \
+  -p="[{\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/args/3\",\"value\":\"--client-id=$NEW_CLIENT_ID\"}]"
+# NOTE: verify the arg index matches --client-id position in oauth2-proxy.yaml
+
+# 4. Restart oauth2-proxy
+kubectl rollout restart deployment/oauth2-proxy -n cloudless
+kubectl rollout status deployment/oauth2-proxy -n cloudless
+
+# 5. Verify login works at https://manage.cloudless.online, then delete old client
+OLD_CLIENT_ID="<previous client id>"
+aws cognito-idp delete-user-pool-client \
+  --user-pool-id "$POOL_ID" \
+  --client-id "$OLD_CLIENT_ID" \
+  --region "$REGION" --profile "$PROFILE"
+```
+
+### oauth2-proxy cookie secret rotation
+
+The cookie secret encrypts session cookies. Rotating it invalidates all active sessions (users must re-login).
+
+```bash
+NEW_COOKIE_SECRET=$(openssl rand -base64 32 | tr -d '\n')
+
+kubectl create secret generic oauth2-proxy-secret \
+  --from-literal=client-secret="$(kubectl get secret oauth2-proxy-secret -n cloudless -o jsonpath='{.data.client-secret}' | base64 -d)" \
+  --from-literal=cookie-secret="$NEW_COOKIE_SECRET" \
+  -n cloudless \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl rollout restart deployment/oauth2-proxy -n cloudless
+```
+
+---
+
 ## Rotation Schedule (recommended)
 
 | Material | Frequency |
 |----------|-----------|
 | k3s encryption key | Annually or on any node compromise |
-| PostgreSQL cert | Automatic (cert-manager, 365d) |
 | HMAC secret | Every 90 days or on any webhook exposure |
 | Cloudflare token | Every 90 days or on any CI/CD credential leak |
 | ECR pull secret | Automatic (every 6h) |
 | AWS IAM access key | Every 90 days or immediately on exposure |
-| Internal CA | Every 10 years or on compromise |
+| Cognito oauth2-proxy client | On any credential exposure or annually |
 
 ---
 
@@ -224,8 +243,8 @@ aws iam delete-access-key --user-name <username> --access-key-id AKIA...
 
 | Path | Description |
 |------|-------------|
-| `k8s/keycloak/postgres-tls.yaml` | cert-manager Certificate + Issuer for PostgreSQL TLS |
 | `k8s/cloudless/ecr-cred-refresher.yaml` | ECR credential auto-rotation CronJob |
 | `k8s/cloudless/auto-healer.yaml` | Detects ECR pull failures and triggers refresh |
+| `k8s/cloudless/oauth2-proxy.yaml` | oauth2-proxy deployment (Cognito OIDC) |
 | `k8s/ha/scripts/grant-iam-key-rotation.sh` | Grants OIDC role permissions for key rotation |
 | `.github/workflows/rotate-aws-key.yml` | Automated key rotation workflow (OIDC, CloudTrail audit, SSM) |
