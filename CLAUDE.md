@@ -46,7 +46,7 @@ creating a separate task for every small change.
 
 | Node | Hardware | Role | LAN IP | Tailscale IP |
 |---|---|---|---|---|
-| `omv-main` | Pi 5 (Cortex-A76, 8 GB) | k3s **server** — control-plane + etcd | 192.168.1.128 | 100.113.41.119 |
+| `omv-main` (k8s node: **`omv`**) | Pi 5 (Cortex-A76, 8 GB) | k3s **server** — control-plane + etcd | 192.168.1.128 | 100.113.41.119 |
 | `omv-ha` | Pi 3B (Cortex-A53, 1 GB) | k3s **agent** only (demoted 2026-05-24) | 192.168.1.130 | — |
 
 **omv-ha demotion (2026-05-24):** omv-ha is now a k3s agent only — no etcd, no control-plane taint. NFS workloads (ntfy, alertmanager) that were running there are unaffected. The old control-plane role moved to omv-main.
@@ -155,7 +155,7 @@ gh workflow run apply-keycloak-removal.yml \
 ### Node assignment
 | Workload type | Node | Reason |
 |---|---|---|
-| All primary user pods (deployments, statefulsets) | `omv-main` (Pi 5, 8 GB) | Main compute node |
+| All primary user pods (deployments, statefulsets) | `omv-main` (k8s node: `omv`, Pi 5, 8 GB) | Main compute node |
 | DaemonSets (node-exporter, flannel) | both nodes | DaemonSets schedule on all nodes |
 | `journal-vacuum-omv-ha` CronJob | `omv-ha` + nodeSelector | Needs hostPID to vacuum that node's journal |
 | Alertmanager, ntfy | `omv-ha` (NFS-backed) | NFS workloads unaffected by 2026-05-24 demotion |

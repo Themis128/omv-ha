@@ -84,10 +84,10 @@ jobs:
       - name: Verify Pi node reachability (optional smoke test)
         run: |
           # Ping omv-main by Tailscale hostname; skip gracefully if not reachable
-          if tailscale ping -c 1 omv-main 2>/dev/null; then
-            echo "omv-main reachable via Tailscale"
+          if tailscale ping -c 1 100.113.41.119 2>/dev/null; then
+            echo "omv reachable via Tailscale"
           else
-            echo "::warning::omv-main not reachable via Tailscale (check ACLs or node status)"
+            echo "::warning::omv not reachable via Tailscale (check ACLs or node status)"
           fi
 
 # ─── Example: inline usage (no reusable workflow call) ────────────────────────
@@ -103,7 +103,7 @@ jobs:
 #       ephemeral:       true
 #
 #   - name: SSH into Pi node
-#     run: ssh tbaltzakis@omv-main "kubectl get pods -A"
+#     run: ssh tbaltzakis@omv "kubectl get pods -A"
 #
 # ─── Setup checklist ──────────────────────────────────────────────────────────
 # 1. Tailscale Admin → Settings → OAuth Clients → Create client
