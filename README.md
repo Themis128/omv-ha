@@ -6,8 +6,8 @@ Two-node embedded-etcd k3s cluster running on Raspberry Pi hardware, serving [cl
 
 | Hostname | Hardware | Role | IP |
 |----------|----------|------|----|
-| `omv` | Pi 5 (8 GB) | server + worker | 192.168.1.128 |
-| `omv-ha` | Pi 4 (1 GB) | server + worker | 192.168.1.130 |
+| `omv-main` (k8s node: `omv`) | Pi 5 (8 GB) | server + worker | 192.168.1.128 |
+| `omv-ha` | Pi 3B (1 GB) | agent only (demoted 2026-05-24) | 192.168.1.130 |
 | VIP | keepalived VRRP | kube-apiserver endpoint | 192.168.1.200 |
 
 WireGuard CNI (flannel-native). etcd heartbeat 300 ms / election 3000 ms (tuned for SD-card fsync latency).
@@ -115,9 +115,11 @@ All `*.cloudless.gr` traffic enters via a Cloudflare tunnel (`cloudflared` on om
 
 ## cloudless.gr failover
 
-`cloudless.gr` uses Route 53 failover routing:
+`cloudless.gr` uses CloudFront origin groups for failover:
 - **PRIMARY**: CloudFront → SST/OpenNext Lambda (managed in `Themis128/cloudless.gr`)
-- **SECONDARY**: API Gateway → `cloudless-pi-proxy` Lambda → Pi over IPv6
+- **SECONDARY**: CloudFront → Tailscale Funnel (`omv.tail8eb71.ts.net`) → Traefik VIP → Pi cluster
+
+Route 53 SECONDARY records (API Gateway path) were retired 2026-05-23; HA failover is now handled entirely by the CloudFront origin group `primary-with-ha`.
 
 ## etcd recovery
 

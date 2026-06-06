@@ -36,7 +36,7 @@ defaultRules:
     KubeProxyDown: true              # k3s uses kube-router, no kube-proxy
     NodeRAIDDegraded: true           # irrelevant on NVMe/SD Pi hardware
     NodeRAIDDiskFailure: true        # irrelevant on NVMe/SD Pi hardware
-    NodeFileDescriptorLimit: true    # trips constantly on Pi 4 (1GB) under normal load
+    NodeFileDescriptorLimit: true    # trips constantly on Pi 3B (1GB) under normal load
     KubeAPIErrorBudgetBurn: true     # production SLO burn rate — too noisy for homelab
 
 # Not accessible separately in k3s (embedded in binary)

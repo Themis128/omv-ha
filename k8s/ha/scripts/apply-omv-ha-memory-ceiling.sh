@@ -3,7 +3,7 @@
 #
 # Without this, Go's GC does not reclaim memory aggressively. During etcd member
 # rejoin (every reboot), the k3s process grows to 2–3 GB and triggers an OOM kill
-# on the 1 GB Pi 4. Setting MemoryHigh forces the GC to run before hitting the hard cap.
+# on the 1 GB Pi 3B. Setting MemoryHigh forces the GC to run before hitting the hard cap.
 #
 # Run once on omv-ha, then restart k3s.
 set -euo pipefail

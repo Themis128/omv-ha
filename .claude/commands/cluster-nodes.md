@@ -78,11 +78,11 @@ If these are missing → run `k8s/ha/scripts/apply-omv-ha-memory-ceiling.sh`.
 NODES: HEALTHY / DEGRADED
 
 omv (Pi 5, 8 GB)      ✅  Ready — CPU: X%  RAM: XGB/7.5GB  Disk: X%
-omv-ha (Pi 4, 1 GB)   ✅  Ready — CPU: X%  RAM: XMB/900MB  Disk: X%
+omv-ha (Pi 3B, 1 GB)  ✅  Ready — CPU: X%  RAM: XMB/900MB  Disk: X%
 
 Taints:
   omv      — none (general worker) ✅
-  omv-ha   — control-plane:NoSchedule ✅/❌
+  omv-ha   — none (agent only, demoted 2026-05-24) ✅
 
 Pod distribution:
   omv:    N pods across N namespaces

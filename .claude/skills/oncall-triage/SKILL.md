@@ -112,7 +112,7 @@ Identify memory hog:
 kubectl top pods -A --sort-by=memory | head -20
 ```
 
-**omv-ha (Pi 4) memory pressure — critical:**
+**omv-ha (Pi 3B) memory pressure — critical:**
 ```bash
 ssh tbaltzakis@192.168.1.130 "free -m; systemctl show k3s --property=MemoryHigh,MemoryMax,MemoryCurrent"
 ```
@@ -229,7 +229,7 @@ These alerts are intentionally disabled — do not investigate unless user expli
 - `KubeControllerManagerDown` — k3s embeds controller manager
 - `KubeProxyDown` — k3s uses kube-router
 - `NodeRAIDDegraded` / `NodeRAIDDiskFailure` — NVMe/SD hardware, no RAID
-- `NodeFileDescriptorLimit` — constant false positive on Pi 4 1GB under normal load
+- `NodeFileDescriptorLimit` — constant false positive on Pi 3B 1GB under normal load
 - `KubeAPIErrorBudgetBurn` — production SLO, too noisy for homelab
 - `Watchdog` — intentional no-op heartbeat
 - `InfoInhibitor` — meta alert for info inhibition pattern

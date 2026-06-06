@@ -94,7 +94,7 @@ Filter with a pattern (e.g. "ERROR", "timeout", "[warn]") to narrow results.`,
         title: "Route 53 Health Checks",
         description: `Check the status of Route 53 health checks for cloudless.gr.
 PRIMARY: CloudFront distribution (main path)
-SECONDARY: API Gateway → Pi 5 (failover path)
+SECONDARY: CloudFront origin group → Tailscale Funnel → Pi cluster (failover path)
 Returns per-region health check observations and overall HEALTHY/UNHEALTHY status.`,
         inputSchema: z.object({
             check: z
@@ -113,7 +113,7 @@ Returns per-region health check observations and overall HEALTHY/UNHEALTHY statu
         }
         if (check === "secondary" || check === "both") {
             checks.push({
-                label: "SECONDARY (APIGW/Pi)",
+                label: "SECONDARY (CloudFront/Tailscale)",
                 id: SECONDARY_HEALTH_CHECK_ID,
             });
         }
@@ -266,7 +266,7 @@ Returns HTTP status codes and basic response headers to confirm CDN is serving c
     server.registerTool("aws_get_infrastructure_summary", {
         title: "Cloudless Infrastructure Summary",
         description: `Return a static summary of the cloudless.gr AWS infrastructure topology.
-Includes: Lambda, CloudFront, Route 53, API Gateway, SSM, and Pi failover path.
+Includes: Lambda, CloudFront, Route 53, SSM, and Pi failover path via Tailscale Funnel.
 Use as a quick reference when diagnosing issues or explaining the architecture.`,
         inputSchema: z.object({}),
         annotations: { readOnlyHint: true, destructiveHint: false },
@@ -283,16 +283,17 @@ User → Route 53 (cloudless.gr)
 
 ## Traffic Flow (Failover — when Lambda health check fails)
 \`\`\`
-User → Route 53 SECONDARY record
-       → API Gateway (dwtp9xt4dd / d-uy6dmk95il.execute-api.us-east-1.amazonaws.com)
-       → Lambda (APIGW handler → Pi 5 IPv6:18443)
-       → Pi 5 (OMV main, 192.168.1.128) running Next.js on port 18443
+User → CloudFront origin group (primary-with-ha)
+       → SECONDARY origin: omv.tail8eb71.ts.net (Tailscale Funnel)
+       → Traefik VIP (192.168.1.200:18443)
+       → cloudless-app pod (Pi cluster)
 \`\`\`
+Note: Route 53 SECONDARY records (API Gateway path) retired 2026-05-23.
 
 ## Route 53
 - Zone: Z079608614L53CC4EAZM3
 - PRIMARY health check: e239ad5c-dd17-40d7-8045-a153715168cf (CloudFront)
-- SECONDARY health check: 30a69f1c-8d48-49bd-9067-cabec979478b (APIGW/Pi)
+- SECONDARY health check: 30a69f1c-8d48-49bd-9067-cabec979478b (CloudFront/Tailscale)
 
 ## Secrets & Config
 - SSM prefix: /cloudless/production
@@ -300,8 +301,8 @@ User → Route 53 SECONDARY record
 - Lambda log group: /aws/lambda/cloudless-*
 
 ## Pi Nodes
-- OMV main (Pi 5): 192.168.1.128 — K3s, Home Assistant, cloudless secondary
-- OMV-HA (Pi 4): 192.168.1.130 — NAS failover, Samba shares backup
+- omv-main (k8s: omv, Pi 5, 8 GB): 192.168.1.128 — k3s server, control-plane + etcd + worker
+- omv-ha (Pi 3B, 1 GB): 192.168.1.130 — k3s agent only (demoted 2026-05-24), cloudflared-ha
 `;
         return { content: [{ type: "text", text }] };
     });
