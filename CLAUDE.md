@@ -225,39 +225,6 @@ Do not lower these values. `took too long` warnings <200 ms are expected and har
 
 ---
 
-## DNS state — cloudless.gr (baseline 2026-06-06T13:05:35Z)
-
-**🚨 DNS DRIFT DETECTED 2026-06-06T17:04Z — 12 records removed from cloudless.gr**
-DNS monitor alert received at 17:04 UTC. Confirmed removals (partial, screenshot cut off):
-- `cloudless.gr:_dmarc:TXT` — DMARC record deleted
-- `cloudless.gr:_domainkey:TXT` — deleted (was empty)
-- `cloudless.gr:www:A` — www subdomain deleted
-- 9+ additional records (full list not visible)
-**Action required:** Check Cloudflare DNS dashboard for cloudless.gr immediately.
-If zone is being stripped, the A/MX/SPF/NS records may also be gone — verify and restore.
-
-Earlier snapshot: SHA `f82eaed72f2018ab0629ae71f2bc5f6febb10dd88208e6fb48f3361a3d8b5968` (2026-06-06T10:05:10Z)
-Last known-good snapshot: SHA `b180250723fbb9bdbee1f7aba945dd7e4d9724afe22fc6d7cbfa84ee365837fc` (2026-06-06T13:05:35Z)
-
-| Record | Value | Notes |
-|---|---|---|
-| `cloudless.gr` A | `104.21.67.68`, `172.67.216.36` | Cloudflare CDN (proxied) |
-| `cloudless.gr` AAAA | `2606:4700:3031::6815:4344`, `2606:4700:3032::ac43:d824` | Cloudflare CDN IPv6 |
-| `cloudless.gr` MX | `10 inbound-smtp.us-east-1.amazonaws.com` | SES receive active |
-| `cloudless.gr` NS | `fay.ns.cloudflare.com`, `jihoon.ns.cloudflare.com` | CF-managed |
-| `cloudless.gr` SPF | `v=spf1 include:amazonses.com ~all` | SES send authorized |
-| `cloudless.gr` DMARC | `v=DMARC1; p=none; rua=mailto:dmarc@cloudless.gr; pct=100; adkim=s; aspf=s` | ⚠️ Strict DKIM+SPF alignment — DKIM missing causes DMARC fail on all SES mail |
-| `cloudless.gr` DKIM | **empty / NXDOMAIN** (`_domainkey`) | ⚠️ SES DKIM CNAMEs not published — deliverability broken |
-| `cloudless.gr` www | same A/AAAA as apex | Removed by DNS drift event 17:04 — restore via Cloudflare dashboard |
-
-**⚠️ DKIM deliverability gap:** DMARC uses `adkim=s` (strict alignment) but no DKIM records are published.
-This means every outgoing email from SES fails DMARC. Fix:
-1. `aws ses get-identity-dkim-attributes --identities cloudless.gr --region us-east-1`
-2. If tokens exist, add the three `_domainkeyN.cloudless.gr` CNAME records to Cloudflare DNS
-3. If no tokens, run `aws ses verify-domain-dkim --domain cloudless.gr --region us-east-1` first
-
----
-
 ## AWS Cognito — cloudless.gr user auth
 
 ### Pool topology
