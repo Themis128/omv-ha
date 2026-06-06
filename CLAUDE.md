@@ -86,18 +86,12 @@ bash k8s/ha/scripts/grant-iam-all.sh   # CloudShell-compatible (no --profile nee
 - ✅ Pass 1 COMPLETE — Cognito client `cloudless-oauth2-proxy` (ID: `63d3fu5lp057694h0t70je4jk0`) exists; secret stored in SSM `/cloudless/production/oauth2-proxy-client-secret`
 - ⏸ Pass 2 DEFERRED — `cluster-apply` job needs Tailscale secrets; also `cloudless.online` domain is gone (2026-06-04), making oauth2-proxy deployment moot until domain/app is restored. Delete keycloak namespace manually when SSH access is available.
 
-**Still pending (Cloudflare dashboard):**
-- Revoke exposed token `cfut_ulgWeq...` → create replacement with `Zone:DNS:Edit` scope
-- Create LB API token (`Load Balancers:Edit` + `Monitors and Pools:Edit`) — hold until new domain/app decided
-
-**Rotate exposed IAM key (still needed):**
-```bash
-# Dry-run first, then re-run with dry_run=false:
-gh workflow run rotate-aws-key.yml \
-  -f iam_username=ses-smtp-prod \
-  -f old_key_id=AKIAUBXIAELU5SADA3XL \
-  -f dry_run=true
-```
+**Security hardening — deferred to end of infrastructure build-out:**
+⚠️  Do NOT prioritise these until the cluster and app are stable. Address as a batch once infra hardening is complete.
+- Revoke exposed CF token `cfut_ulgWeq...` → use `cloudflare-token-revoke.yml` workflow (no dashboard needed)
+- Create replacement CF token with `Zone:DNS:Edit` scope → `gh secret set CLOUDFLARE_API_TOKEN`
+- Create CF LB API token (`Load Balancers:Edit` + `Monitors and Pools:Edit`) — hold until domain/app decided
+- Rotate exposed IAM key `AKIAUBXIAELU5SADA3XL` (ses-smtp-prod) → use `rotate-aws-key.yml` workflow
 
 **Tailscale OAuth (only needed when cluster SSH access via CI is required):**
 - Create OAuth client at admin.tailscale.com → Settings → OAuth clients (`auth_keys` scope)
