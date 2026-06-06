@@ -49,7 +49,7 @@ creating a separate task for every small change.
 | `omv-main` (k8s node: **`omv`**) | Pi 5 (Cortex-A76, 8 GB) | k3s **server** — control-plane + etcd | 192.168.1.128 | 100.113.41.119 |
 | `omv-ha` | Pi 3B (Cortex-A53, 1 GB) | k3s **agent** only (demoted 2026-05-24) | 192.168.1.130 | — |
 
-**omv-ha demotion (2026-05-24):** omv-ha is now a k3s agent only — no etcd, no control-plane taint. NFS workloads (ntfy, alertmanager) that were running there are unaffected. The old control-plane role moved to omv-main.
+**omv-ha demotion (2026-05-24):** omv-ha is now a k3s agent only — no etcd, no control-plane taint. The old control-plane role moved to omv-main. (ntfy and alertmanager run on omv-main with NFS storage, not omv-ha.)
 
 ## omv-ha node (Pi 3B, 1 GB) — annual config checklist
 See Notion task "omv-ha PR #13 — annual config review" (due 2027-06-03) for the full checklist.
@@ -158,9 +158,9 @@ gh workflow run apply-keycloak-removal.yml \
 | All primary user pods (deployments, statefulsets) | `omv-main` (k8s node: `omv`, Pi 5, 8 GB) | Main compute node |
 | DaemonSets (node-exporter, flannel) | both nodes | DaemonSets schedule on all nodes |
 | `journal-vacuum-omv-ha` CronJob | `omv-ha` + nodeSelector | Needs hostPID to vacuum that node's journal |
-| Alertmanager, ntfy | `omv-ha` (NFS-backed) | NFS workloads unaffected by 2026-05-24 demotion |
+| Alertmanager, ntfy | `omv-main` (k8s node: `omv`) | Use NFS storage (ReadWriteMany) but run on omv-main; NFS accessible from any node |
 
-Note: omv-ha has ~700 MB RAM — keep workload count low. NFS-backed pods (ntfy, alertmanager) can stay there; memory-heavy pods (Prometheus, Metabase, ML) must be on omv-main.
+Note: omv-ha has ~700 MB RAM — keep workload count low. Only the `journal-vacuum-omv-ha` CronJob and `cloudflared-ha` deployment run there. All other pods (including NFS-backed ntfy and alertmanager) run on omv-main.
 
 ### ARM64 image requirement
 Every container image deployed to this cluster **must** support `linux/arm64` (aarch64).
@@ -198,7 +198,7 @@ Rough budget for omv-main:
 ### Pre-deploy checklist (before `kubectl apply` or `helm upgrade`)
 1. Secrets exist: `kubectl get secret <name> -n <namespace>`
 2. PVCs provisioned (if needed): `kubectl get pvc -n <namespace>`
-3. Node selector is `omv-main` for memory-heavy workloads; `omv-ha` only for NFS-backed lightweight pods
+3. Node selector is `kubernetes.io/hostname: omv` for all pods except `journal-vacuum-omv-ha` (which must target `omv-ha`) and `cloudflared-ha`
 4. Image has arm64 variant
 5. Resource limits set on all containers
 6. `storageClassName` matches node selector (local-path only if pinned to omv-main)
