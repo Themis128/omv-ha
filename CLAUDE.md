@@ -93,6 +93,30 @@ bash k8s/ha/scripts/grant-iam-all.sh   # CloudShell-compatible (no --profile nee
 - Create CF LB API token (`Load Balancers:Edit` + `Monitors and Pools:Edit`) — hold until domain/app decided
 - Rotate exposed IAM key `AKIAUBXIAELU5SADA3XL` (ses-smtp-prod) → use `rotate-aws-key.yml` workflow
 
+**⚠️ CREDENTIAL ROTATION REQUIRED — publicly exposed in git history (commit 5d2e355, master, ~2026-05-09):**
+The following live credentials were committed to `k8s/n8n/n8n.yaml` and remain in public git history.
+The file has been fixed (PR #15) but history must be scrubbed and all keys rotated.
+
+| Credential | Where to rotate |
+|---|---|
+| Anthropic API key `sk-ant-api03-KRg...` | console.anthropic.com → API Keys |
+| Notion token `ntn_336915499627...` | notion.so/my-integrations → revoke + recreate |
+| Slack webhook `hooks.slack.com/services/T09AF5VTK4G/...` | api.slack.com/apps → Incoming Webhooks → revoke |
+| AWS key `AKIAUBXIAELUYMUPWXLG` (omv-main-cli user) | AWS IAM → deactivate + create new key |
+| n8n encryption key `e050271f...` | generate new: `openssl rand -hex 32`, re-encrypt existing workflows |
+
+After rotating all keys, scrub git history and force-push master:
+```bash
+# From a local clone with write access:
+git filter-repo --replace-text <(printf \
+  'REDACTED_ANTHROPIC_KEY==>REDACTED_ANTHROPIC_KEY\n
+  REDACTED_NOTION_TOKEN==>REDACTED_NOTION_TOKEN\n
+  REDACTED_AWS_SECRET_OMVMAINCLI==>REDACTED_AWS_SECRET\n
+  REDACTED_N8N_ENCRYPTION_KEY==>REDACTED_N8N_KEY') \
+  --force
+git push origin master --force-with-lease
+```
+
 **Tailscale OAuth (only needed when cluster SSH access via CI is required):**
 - Create OAuth client at admin.tailscale.com → Settings → OAuth clients (`auth_keys` scope)
 - `gh secret set TS_OAUTH_CLIENT_ID --body "tskey-client-..."` + `TS_OAUTH_SECRET`
