@@ -1,0 +1,88 @@
+name: Revoke Cloudflare API Token (self-revoke)
+
+# Uses the current CLOUDFLARE_API_TOKEN secret to revoke itself via the
+# Cloudflare API. No dashboard access required.
+#
+# After running this workflow:
+#   1. Create a new token at dash.cloudflare.com → My Profile → API Tokens
+#      Template: Edit zone DNS → Zone: cloudless.gr
+#   2. gh secret set CLOUDFLARE_API_TOKEN --repo themis128/omv-ha --body "cfXXX..."
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "revoke" to confirm permanent revocation of CLOUDFLARE_API_TOKEN'
+        required: true
+        type: string
+
+jobs:
+  revoke:
+    name: Self-revoke CLOUDFLARE_API_TOKEN
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Confirm intent
+        run: |
+          if [[ "${{ inputs.confirm }}" != "revoke" ]]; then
+            echo "::error::Type exactly 'revoke' in the confirm field to proceed."
+            exit 1
+          fi
+
+      - name: Verify token + get ID
+        id: verify
+        run: |
+          RESPONSE=$(curl -sf \
+            https://api.cloudflare.com/client/v4/user/tokens/verify \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" || echo '{"success":false}')
+
+          SUCCESS=$(echo "$RESPONSE" | jq -r '.success')
+          if [[ "$SUCCESS" != "true" ]]; then
+            echo "::error::Token verification failed — token may already be revoked or invalid."
+            echo "Response: $RESPONSE"
+            exit 1
+          fi
+
+          TOKEN_ID=$(echo "$RESPONSE" | jq -r '.result.id')
+          TOKEN_STATUS=$(echo "$RESPONSE" | jq -r '.result.status')
+          echo "token_id=$TOKEN_ID" >> "$GITHUB_OUTPUT"
+          echo "Token ID: $TOKEN_ID  Status: $TOKEN_STATUS"
+
+      - name: Revoke token
+        run: |
+          RESPONSE=$(curl -sf -X DELETE \
+            "https://api.cloudflare.com/client/v4/user/tokens/${{ steps.verify.outputs.token_id }}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" || echo '{"success":false}')
+
+          SUCCESS=$(echo "$RESPONSE" | jq -r '.success')
+          if [[ "$SUCCESS" != "true" ]]; then
+            echo "::error::Revocation failed: $RESPONSE"
+            exit 1
+          fi
+          echo "Token ${{ steps.verify.outputs.token_id }} revoked successfully."
+
+      - name: Next steps
+        if: success()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## ✅ Cloudflare token revoked
+
+          The `CLOUDFLARE_API_TOKEN` GitHub secret now contains a dead token.
+          Update it before any DNS/Cloudflare workflow runs again.
+
+          **Steps:**
+          1. Create replacement at [dash.cloudflare.com → My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+             - Use template: **Edit zone DNS**
+             - Zone resources: Include → Specific zone → `cloudless.gr`
+          2. Update GitHub secret:
+             ```bash
+             gh secret set CLOUDFLARE_API_TOKEN --repo themis128/omv-ha --body "cfXXX..."
+             ```
+          3. Verify new token works:
+             ```bash
+             curl -s https://api.cloudflare.com/client/v4/user/tokens/verify \
+               -H "Authorization: Bearer <new-token>"
+             ```
+          EOF

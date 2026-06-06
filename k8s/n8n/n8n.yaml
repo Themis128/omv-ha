@@ -24,18 +24,24 @@ spec:
     requests:
       storage: 2Gi
 
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: n8n-secrets
-  namespace: n8n
-type: Opaque
-stringData:
-  N8N_ENCRYPTION_KEY: "REDACTED_N8N_ENCRYPTION_KEY"
-  NOTION_API_TOKEN: "REDACTED_NOTION_TOKEN"
-  ANTHROPIC_API_KEY: "REDACTED_ANTHROPIC_KEY"
-  SLACK_WEBHOOK_URL: "https://hooks.slack.com/services/T09AF5VTK4G/B0ARPA1F067/REDACTED_SLACK_WEBHOOK_TOKEN"
+# n8n-secrets — DO NOT create this via kubectl apply.
+# Create directly on the cluster (never commit real values):
+#
+#   kubectl create secret generic n8n-secrets -n n8n \
+#     --from-literal=N8N_ENCRYPTION_KEY="<generate with: openssl rand -hex 32>" \
+#     --from-literal=NOTION_API_TOKEN="ntn_..." \
+#     --from-literal=ANTHROPIC_API_KEY="sk-ant-api03-..." \
+#     --from-literal=SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+#
+# ⚠️  ROTATE the following — they were exposed in git history (commit 5d2e355):
+#     • ANTHROPIC_API_KEY  → console.anthropic.com → API Keys
+#     • NOTION_API_TOKEN   → notion.so/my-integrations
+#     • SLACK_WEBHOOK_URL  → api.slack.com/apps → your app → Incoming Webhooks
+#     • N8N_ENCRYPTION_KEY → generate new value, migrate existing workflows
+#
+# After rotating, scrub history:
+#   git filter-repo --replace-text <(echo "OLD_KEY==>REDACTED") --force
+#   git push origin master --force-with-lease
 
 ---
 apiVersion: apps/v1

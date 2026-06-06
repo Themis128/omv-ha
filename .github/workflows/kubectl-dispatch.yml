@@ -1,0 +1,70 @@
+name: kubectl (remote dispatch via Tailscale)
+
+# Run any kubectl command on the k3s cluster from GitHub Actions.
+# Requires: TS_OAUTH_CLIENT_ID, TS_OAUTH_SECRET, PI_SSH_KEY secrets.
+# See: .claude/skills/tailscale-oauth-setup/SKILL.md for setup instructions.
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'kubectl args — e.g. "get nodes -o wide" or "delete namespace keycloak --ignore-not-found"'
+        required: true
+        type: string
+      dry_run:
+        description: 'Print command only, do not execute'
+        type: boolean
+        default: false
+
+jobs:
+  run:
+    name: kubectl ${{ inputs.command }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Dry run — print command only
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          echo "DRY RUN: kubectl ${{ inputs.command }}"
+          echo "### kubectl dispatch — dry run" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "kubectl ${{ inputs.command }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Connect to Tailscale
+        if: ${{ inputs.dry_run == false }}
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          ephemeral: true
+
+      - name: Configure SSH key
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PI_SSH_KEY }}" > ~/.ssh/pi_key
+          chmod 600 ~/.ssh/pi_key
+          cat >> ~/.ssh/config <<'EOF'
+          Host omv
+            HostName omv
+            User tbaltzakis
+            IdentityFile ~/.ssh/pi_key
+            StrictHostKeyChecking no
+            ConnectTimeout 15
+          EOF
+
+      - name: Run kubectl
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          echo "Running: kubectl ${{ inputs.command }}"
+          OUTPUT=$(ssh tbaltzakis@omv "kubectl ${{ inputs.command }}" 2>&1)
+          echo "$OUTPUT"
+          echo "### kubectl dispatch" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$ kubectl ${{ inputs.command }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "$OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

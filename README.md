@@ -25,7 +25,7 @@ k8s/
 └── oncall/             # Grafana OnCall deps, Helm values, ingress, security
 ```
 
-> Namespaces not tracked as manifests (managed externally or by Helm): `cert-manager`, `keycloak`, `kube-system`, `traefik`, `cloudless`, `oncall` (Helm-managed engine), `nfs-provisioner`.
+> Namespaces not tracked as manifests (managed externally or by Helm): `cert-manager`, `kube-system`, `traefik`, `cloudless`, `oncall` (Helm-managed engine), `nfs-provisioner`.
 
 ## Namespaces
 
