@@ -227,8 +227,17 @@ Do not lower these values. `took too long` warnings <200 ms are expected and har
 
 ## DNS state — cloudless.gr (baseline 2026-06-06T13:05:35Z)
 
+**🚨 DNS DRIFT DETECTED 2026-06-06T17:04Z — 12 records removed from cloudless.gr**
+DNS monitor alert received at 17:04 UTC. Confirmed removals (partial, screenshot cut off):
+- `cloudless.gr:_dmarc:TXT` — DMARC record deleted
+- `cloudless.gr:_domainkey:TXT` — deleted (was empty)
+- `cloudless.gr:www:A` — www subdomain deleted
+- 9+ additional records (full list not visible)
+**Action required:** Check Cloudflare DNS dashboard for cloudless.gr immediately.
+If zone is being stripped, the A/MX/SPF/NS records may also be gone — verify and restore.
+
 Earlier snapshot: SHA `f82eaed72f2018ab0629ae71f2bc5f6febb10dd88208e6fb48f3361a3d8b5968` (2026-06-06T10:05:10Z)
-Current snapshot: SHA `b180250723fbb9bdbee1f7aba945dd7e4d9724afe22fc6d7cbfa84ee365837fc` (2026-06-06T13:05:35Z)
+Last known-good snapshot: SHA `b180250723fbb9bdbee1f7aba945dd7e4d9724afe22fc6d7cbfa84ee365837fc` (2026-06-06T13:05:35Z)
 
 | Record | Value | Notes |
 |---|---|---|
