@@ -1,0 +1,209 @@
+name: cloudless.gr — Remove Keycloak (Cognito migration)
+
+# Clones Themis128/cloudless.gr, runs Claude Code to remove all Keycloak dead code,
+# and opens a draft PR in cloudless.gr.
+#
+# Required secrets (set in this repo):
+#   CLOUDLESS_PAT        — GitHub PAT with repo:write scope on Themis128/cloudless.gr
+#   ANTHROPIC_API_KEY    — Anthropic API key for Claude Code Action
+#
+# Auth context: cloudless.gr auth has migrated to AWS Cognito (omv-ha PR #14).
+# This workflow removes the keycloak-admin client, rewrites register/resend-verification
+# routes to use Cognito AdminCreateUser, and strips all KEYCLOAK_* env var references.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'true = scan and report only (no file changes) | false = apply all changes and open PR'
+        type: boolean
+        default: true
+
+jobs:
+  migrate:
+    name: Keycloak → Cognito dead-code removal
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout cloudless.gr
+        uses: actions/checkout@v4
+        with:
+          repository: Themis128/cloudless.gr
+          token: ${{ secrets.CLOUDLESS_PAT }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin \
+            "https://x-access-token:${{ secrets.CLOUDLESS_PAT }}@github.com/Themis128/cloudless.gr.git"
+
+      - name: Remove Keycloak dead code via Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.CLOUDLESS_PAT }}
+          base_branch: main
+          prompt: |
+            DRY_RUN=${{ inputs.dry_run }}
+
+            If DRY_RUN is true: SCAN ONLY — do NOT write any files. Print a full change summary, then stop.
+            If DRY_RUN is false: apply every step below, verify, and commit.
+
+            CONTEXT: This is the cloudless.gr Next.js app. Auth has been fully migrated to
+            AWS Cognito (omv-ha PR #14). All Keycloak references are dead code to be removed.
+            Env vars in use: NEXT_PUBLIC_COGNITO_USER_POOL_ID, NEXT_PUBLIC_COGNITO_CLIENT_ID,
+            COGNITO_REGION (default us-east-1), COGNITO_USER_POOL_ID (server-side).
+
+            ---
+
+            STEP 1 — Scan
+            Run: grep -r keycloak src/ --include="*.ts" --include="*.tsx" -l | sort
+            Print the file list. Count them. If DRY_RUN=true, print a detailed plan of what
+            each file needs (delete / functional rewrite / targeted edit / comment update) then STOP.
+
+            ---
+
+            STEP 2 — Delete src/lib/keycloak-admin.ts
+            This file contains the Keycloak Admin client. Delete it entirely.
+
+            ---
+
+            STEP 3 — Rewrite src/app/api/auth/register/route.ts
+            Read the file first. Then:
+            1. Remove the import from "@/lib/keycloak-admin"
+            2. Add at the top:
+               import {
+                 CognitoIdentityProviderClient,
+                 AdminCreateUserCommand,
+                 MessageActionType,
+               } from "@aws-sdk/client-cognito-identity-provider";
+               const cognitoClient = new CognitoIdentityProviderClient({
+                 region: process.env.COGNITO_REGION ?? "us-east-1",
+               });
+               const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID ?? "";
+            3. Replace the keycloak user-creation block (getAdminToken + parseRealm + sendVerifyEmail)
+               with:
+               await cognitoClient.send(
+                 new AdminCreateUserCommand({
+                   UserPoolId: USER_POOL_ID,
+                   Username: email,
+                   UserAttributes: [
+                     { Name: "email", Value: email },
+                     { Name: "email_verified", Value: "false" },
+                   ],
+                   MessageAction: MessageActionType.SUPPRESS,
+                   TemporaryPassword: crypto.randomUUID(),
+                 })
+               );
+            4. Keep the existing response shape, status codes, and error handling intact.
+
+            ---
+
+            STEP 4 — Rewrite src/app/api/auth/resend-verification/route.ts
+            Read the file first. Replace the sendVerifyEmail call with:
+            await cognitoClient.send(
+              new AdminCreateUserCommand({
+                UserPoolId: USER_POOL_ID,
+                Username: email,
+                MessageAction: MessageActionType.RESEND,
+              })
+            );
+            Add the same cognitoClient + USER_POOL_ID setup if not already present.
+
+            ---
+
+            STEP 5 — Edit src/lib/api-auth.ts
+            Read the file. Remove the block that builds a JWKS URL from KEYCLOAK_ISSUER.
+            Keep only the Cognito JWKS path (cognito-idp.<region>.amazonaws.com/<poolId>/.well-known/jwks.json).
+            Remove any import or reference to KEYCLOAK_ISSUER.
+
+            ---
+
+            STEP 6 — Edit src/lib/ssm-config.ts
+            Read the file. Remove these four fields from the SSM config type and fetch logic:
+              KEYCLOAK_ADMIN_USER
+              KEYCLOAK_ADMIN_PASSWORD
+              KEYCLOAK_ADMIN_CLIENT_ID
+              KEYCLOAK_ADMIN_CLIENT_SECRET
+
+            ---
+
+            STEP 7 — Edit src/app/[locale]/auth/login/page.tsx
+            Read the file. Remove:
+            - The USE_KEYCLOAK constant and NEXT_PUBLIC_KEYCLOAK_ISSUER check
+            - The conditional branch that renders the Keycloak SSO button
+            Keep only the USE_COGNITO path and email/password fallback.
+
+            ---
+
+            STEP 8 — Edit src/lib/amplify-config.ts
+            Read the file. Remove !!process.env.NEXT_PUBLIC_KEYCLOAK_ISSUER from any condition.
+            Keep only the NEXT_PUBLIC_AUTH_PROVIDER check.
+
+            ---
+
+            STEP 9 — Edit src/app/api/admin/users/route.ts
+            Read the file. Remove the entire Keycloak helpers section (the block marked with
+            "Keycloak helpers" comment, including KEYCLOAK_ADMIN_CLIENT_SECRET and all KC branches).
+
+            ---
+
+            STEP 10 — Edit src/app/[locale]/admin/users/page.tsx
+            Read the file. Remove the provider === "keycloak" ? "Keycloak" : branch.
+            Replace with just the Cognito display label or an empty string fallback.
+
+            ---
+
+            STEP 11 — Edit Dockerfile
+            Remove these two lines:
+              ARG NEXT_PUBLIC_KEYCLOAK_ISSUER=...
+              ARG NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=...
+
+            ---
+
+            STEP 12 — Update src/app/[locale]/privacy/page.tsx
+            Replace:
+              "Keycloak (authentication, self-hosted on our infrastructure)"
+            With:
+              "Amazon Cognito (authentication, AWS-managed, EU region)"
+
+            ---
+
+            STEP 13 — Update inline comments in all remaining Keycloak-referenced files
+            For every other src/ file that contains "keycloak" only in comments:
+            - "Keycloak Bearer token" → "OIDC Bearer token"
+            - "Keycloak access token" → "Cognito/OIDC access token"
+            - Remove references to KC-specific claims (groups, realm:admin)
+            - "signIn(\"keycloak\")" comment → "signIn(\"cognito\")"
+
+            ---
+
+            STEP 14 — Install SDK if missing
+            Run: npm list @aws-sdk/client-cognito-identity-provider 2>/dev/null \
+              || npm install @aws-sdk/client-cognito-identity-provider
+            If installed, move to Step 15.
+
+            ---
+
+            STEP 15 — Verify
+            Run: grep -r "keycloak-admin\|KEYCLOAK_ISSUER\|KEYCLOAK_ADMIN\|USE_KEYCLOAK" \
+              src/ --include="*.ts" --include="*.tsx"
+            This MUST return zero results. If any remain, fix them before committing.
+
+            ---
+
+            STEP 16 — Commit (apply mode only)
+            git add -A
+            git commit -m "Remove Keycloak dead code — Cognito-only auth
+
+            Auth migrated to AWS Cognito (omv-ha PR #14).
+            - Delete src/lib/keycloak-admin.ts
+            - Rewrite register + resend-verification routes to use Cognito AdminCreateUser
+            - Remove KEYCLOAK_* env var references from api-auth, ssm-config, login page
+            - Remove KC provider branch from admin/users display
+            - Update Dockerfile, privacy page"
