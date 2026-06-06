@@ -38,12 +38,15 @@ fi
 echo ""
 echo "=== Step 1: Rotating IAM key for $IAM_USER ==="
 
-# Deactivate old key
-aws iam update-access-key \
+# Deactivate old key (no-op if already deleted/rotated)
+if aws iam update-access-key \
   --user-name "$IAM_USER" \
   --access-key-id "$OLD_AWS_KEY_ID" \
-  --status Inactive
-echo "  Deactivated $OLD_AWS_KEY_ID"
+  --status Inactive 2>/dev/null; then
+  echo "  Deactivated $OLD_AWS_KEY_ID"
+else
+  echo "  Key $OLD_AWS_KEY_ID not found — already deleted or rotated. Skipping deactivation."
+fi
 
 # Create new key
 NEW_KEY_JSON=$(aws iam create-access-key --user-name "$IAM_USER")
