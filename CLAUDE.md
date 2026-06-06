@@ -86,12 +86,25 @@ bash k8s/ha/scripts/grant-iam-all.sh   # CloudShell-compatible (no --profile nee
 - ✅ Pass 1 COMPLETE — Cognito client `cloudless-oauth2-proxy` (ID: `63d3fu5lp057694h0t70je4jk0`) exists; secret stored in SSM `/cloudless/production/oauth2-proxy-client-secret`
 - ⏸ Pass 2 DEFERRED — `cluster-apply` job needs Tailscale secrets; also `cloudless.online` domain is gone (2026-06-04), making oauth2-proxy deployment moot until domain/app is restored. Delete keycloak namespace manually when SSH access is available.
 
-**Security items — deferred to end of infrastructure build-out:**
-⚠️  Do NOT prioritise these until the infrastructure build-out is complete. Address as a batch once cluster and app are stable.
-- Revoke exposed CF token `cfut_ulgWeq...` → use `cloudflare-token-revoke.yml` workflow (no dashboard needed)
-- Create replacement CF token with `Zone:DNS:Edit` scope → `gh secret set CLOUDFLARE_API_TOKEN`
-- Create CF LB API token (`Load Balancers:Edit` + `Monitors and Pools:Edit`) — hold until domain/app decided
-- Rotate exposed IAM key `AKIAUBXIAELU5SADA3XL` (ses-smtp-prod) → use `rotate-aws-key.yml` workflow
+**Credential rotation — trigger via GitHub Actions UI (Actions tab → Run workflow):**
+All IAM permissions already granted (`grant-iam-all.sh` ✅ 2026-06-04). Execute in order:
+
+| Step | Workflow | Inputs | Status |
+|---|---|---|---|
+| 1. Revoke old CF token | `cloudflare-token-revoke.yml` | confirm=`revoke` | ⬜ |
+| 2. Create new CF token | dash.cloudflare.com → My Profile → API Tokens (Zone:DNS:Edit for cloudless.gr) then GitHub Settings → Secrets → `CLOUDFLARE_API_TOKEN` | — | ⬜ |
+| 3. Rotate ses-smtp-prod IAM key | `rotate-aws-key.yml` | iam_username=`ses-smtp-prod`, old_key_id=`AKIAUBXIAELU5SADA3XL`, dry_run=`true` first then `false` | ⬜ |
+| 4. Retrieve new IAM key from SSM → update GitHub secrets | see workflow summary for commands | — | ⬜ |
+| 5. cloudless.gr Keycloak cleanup | `cloudless-keycloak-cleanup.yml` | dry_run=`true` first then `false` | ⬜ blocked: needs `CLOUDLESS_PAT` + `ANTHROPIC_API_KEY` secrets set first |
+| 6. CF LB API token | dash.cloudflare.com | — | ⏸ hold until domain/app decided |
+
+After step 3 runs (dry_run=false), retrieve from SSM and update secrets via CloudShell:
+```bash
+SSM="/github-actions/aws-key/ses-smtp-prod"
+NEW_KEY=$(aws ssm get-parameter --name "${SSM}/access-key-id" --query Parameter.Value --output text)
+NEW_SECRET=$(aws ssm get-parameter --name "${SSM}/secret-access-key" --with-decryption --query Parameter.Value --output text)
+# Then update GitHub secrets via Settings → Secrets (or gh secret set if gh CLI available)
+```
 
 **⚠️ CREDENTIAL ROTATION REQUIRED — publicly exposed in git history (commit bbf3f61d, master, ~2026-05-09):**
 
@@ -133,6 +146,7 @@ gh workflow run apply-keycloak-removal.yml \
 - Exposed Cloudflare token scrubbed from all history via `git filter-repo` on 2026-06-03 (PR #13 branch)
 - n8n/duckdb/maintenance credentials scrubbed from all history via `git filter-repo` on 2026-06-06 (both master + PR branch force-pushed, verified via GitHub API)
 - All subsequent pushes to this branch are force-pushed due to rewritten history
+- **PR #16** (draft) — `claude/node-architecture-research-fuYGh` → master: Keycloak removal, Cognito migration, security scrub, ops tooling workflows + skills. Pending merge until credential rotation complete.
 
 ---
 
