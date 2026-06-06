@@ -86,8 +86,8 @@ bash k8s/ha/scripts/grant-iam-all.sh   # CloudShell-compatible (no --profile nee
 - ✅ Pass 1 COMPLETE — Cognito client `cloudless-oauth2-proxy` (ID: `63d3fu5lp057694h0t70je4jk0`) exists; secret stored in SSM `/cloudless/production/oauth2-proxy-client-secret`
 - ⏸ Pass 2 DEFERRED — `cluster-apply` job needs Tailscale secrets; also `cloudless.online` domain is gone (2026-06-04), making oauth2-proxy deployment moot until domain/app is restored. Delete keycloak namespace manually when SSH access is available.
 
-**Security hardening — deferred to end of infrastructure build-out:**
-⚠️  Do NOT prioritise these until the cluster and app are stable. Address as a batch once infra hardening is complete.
+**Security items — deferred to end of infrastructure build-out:**
+⚠️  Do NOT prioritise these until the infrastructure build-out is complete. Address as a batch once cluster and app are stable.
 - Revoke exposed CF token `cfut_ulgWeq...` → use `cloudflare-token-revoke.yml` workflow (no dashboard needed)
 - Create replacement CF token with `Zone:DNS:Edit` scope → `gh secret set CLOUDFLARE_API_TOKEN`
 - Create CF LB API token (`Load Balancers:Edit` + `Monitors and Pools:Edit`) — hold until domain/app decided
