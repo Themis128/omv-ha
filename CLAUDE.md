@@ -93,33 +93,28 @@ bash k8s/ha/scripts/grant-iam-all.sh   # CloudShell-compatible (no --profile nee
 - Create CF LB API token (`Load Balancers:Edit` + `Monitors and Pools:Edit`) — hold until domain/app decided
 - Rotate exposed IAM key `AKIAUBXIAELU5SADA3XL` (ses-smtp-prod) → use `rotate-aws-key.yml` workflow
 
-**⚠️ CREDENTIAL ROTATION REQUIRED — publicly exposed in git history (commit 5d2e355, master, ~2026-05-09):**
-The file has been fixed (PR #15). History scrubbed locally on 2026-06-06 — force-push from local machine to complete.
+**⚠️ CREDENTIAL ROTATION REQUIRED — publicly exposed in git history (commit bbf3f61d, master, ~2026-05-09):**
 
-| Credential | Where to rotate |
-|---|---|
-| Anthropic API key (n8n) | console.anthropic.com → API Keys |
-| Notion token (n8n) | notion.so/my-integrations → revoke + recreate |
-| Slack webhook (n8n) | api.slack.com/apps → Incoming Webhooks → revoke |
-| AWS key AKIAUBXIAELUYMUPWXLG (omv-main-cli user) | AWS IAM → deactivate + create new key |
-| n8n encryption key | generate new: `openssl rand -hex 32`, re-encrypt existing workflows |
+✅ **Git history scrub: COMPLETE** (2026-06-06) — all branches force-pushed with credentials replaced by `REDACTED_*` tokens. Verified via GitHub API.
+✅ **AWS key AKIAUBXIAELUYMUPWXLG (omv-main-cli):** Already deleted from IAM — confirmed 2026-06-06.
 
-**Force-push to complete the history scrub (run from a local clone):**
+Remaining browser rotations (user action required):
+
+| Credential | Where to rotate | Status |
+|---|---|---|
+| Anthropic API key (n8n) | console.anthropic.com → API Keys | ⬜ pending |
+| Notion token (n8n) | notion.so/my-integrations → revoke + recreate | ⬜ pending |
+| Slack webhook (n8n) | api.slack.com/apps → Incoming Webhooks → revoke | ⬜ pending |
+| n8n encryption key | `openssl rand -hex 32`, then update cluster secret (see below) | ⬜ pending |
+
+After rotating, update the cluster secret:
 ```bash
-# 1. Clone fresh
-git clone https://github.com/Themis128/omv-ha.git omv-ha-scrub && cd omv-ha-scrub
-
-# 2. Install git-filter-repo if needed
-pip3 install git-filter-repo
-
-# 3. Create replacements file with the actual exposed values
-#    (get them from the commit: git show 5d2e355 -- k8s/n8n/n8n.yaml)
-#    Then run:
-git filter-repo --replace-text replacements.txt --force
-
-# 4. Force-push all branches
-git push origin master --force-with-lease
-git push origin claude/node-architecture-research-fuYGh --force-with-lease
+kubectl create secret generic n8n-secrets -n n8n \
+  --from-literal=N8N_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
+  --from-literal=NOTION_API_TOKEN="ntn_..." \
+  --from-literal=ANTHROPIC_API_KEY="sk-ant-api03-..." \
+  --from-literal=SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..." \
+  --dry-run=client -o yaml | kubectl apply -f -
 ```
 
 **Tailscale OAuth (only needed when cluster SSH access via CI is required):**
@@ -136,6 +131,7 @@ gh workflow run apply-keycloak-removal.yml \
 
 ## Git history
 - Exposed Cloudflare token scrubbed from all history via `git filter-repo` on 2026-06-03 (PR #13 branch)
+- n8n/duckdb/maintenance credentials scrubbed from all history via `git filter-repo` on 2026-06-06 (both master + PR branch force-pushed, verified via GitHub API)
 - All subsequent pushes to this branch are force-pushed due to rewritten history
 
 ---
