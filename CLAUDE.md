@@ -84,6 +84,16 @@ bash k8s/ha/scripts/grant-iam-all.sh   # CloudShell-compatible (no --profile nee
 
 **apply-keycloak-removal.yml status:**
 - ✅ Pass 1 COMPLETE — Cognito client `cloudless-oauth2-proxy` (ID: `63d3fu5lp057694h0t70je4jk0`) exists; secret stored in SSM `/cloudless/production/oauth2-proxy-client-secret`
+- ⚠️ **Cognito callback URLs need updating** — client was created with `manage.cloudless.online` callbacks (now dead domain). Run from CloudShell:
+  ```bash
+  POOL_ID=$(aws ssm get-parameter --name /cloudless/production/COGNITO_USER_POOL_ID --query Parameter.Value --output text)
+  aws cognito-idp update-user-pool-client \
+    --user-pool-id "$POOL_ID" \
+    --client-id 63d3fu5lp057694h0t70je4jk0 \
+    --callback-urls "https://manage.cloudless.gr/oauth2/callback" \
+    --logout-urls "https://manage.cloudless.gr" \
+    --region us-east-1
+  ```
 - ⏸ Pass 2 DEFERRED — `cluster-apply` job needs Tailscale secrets; app subdomain routing (manage.cloudless.gr) must also be configured before oauth2-proxy is useful. Delete keycloak namespace manually when SSH access is available.
 
 **Credential rotation — trigger via GitHub Actions UI (Actions tab → Run workflow):**
