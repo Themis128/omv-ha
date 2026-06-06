@@ -112,7 +112,7 @@ jobs:
 
           if [[ "${{ inputs.target }}" != "ha-only" ]]; then
             echo "### omv-main" >> "$GITHUB_STEP_SUMMARY"
-            STATUS=$(ssh omv-main "tailscale status" 2>&1)
+            STATUS=$(ssh omv-main "tailscale status 2>&1 || echo '(tailscale not running or not installed)'" 2>&1)
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             echo "$STATUS" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
@@ -121,7 +121,7 @@ jobs:
 
           if [[ "${{ inputs.target }}" != "main-only" ]]; then
             echo "### omv-ha" >> "$GITHUB_STEP_SUMMARY"
-            STATUS=$(ssh omv-ha "tailscale status" 2>&1)
+            STATUS=$(ssh omv-ha "tailscale status 2>&1 || echo '(tailscale not running or not installed)'" 2>&1)
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             echo "$STATUS" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
