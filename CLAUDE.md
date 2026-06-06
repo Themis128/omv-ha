@@ -99,16 +99,32 @@ bash k8s/ha/scripts/grant-iam-all.sh   # CloudShell-compatible (no --profile nee
 **Credential rotation — trigger via GitHub Actions UI (Actions tab → Run workflow):**
 All IAM permissions already granted (`grant-iam-all.sh` ✅ 2026-06-04). Execute in order:
 
-| Step | Workflow | Inputs | Status |
+**Optimal CF token architecture (two tokens — see research 2026-06-06):**
+| Token name | Stored in | Scopes | Rotation |
 |---|---|---|---|
-| 1. Revoke old CF token | `cloudflare-token-revoke.yml` | confirm=`revoke` | ⬜ |
-| 2. Create new CF token | dash.cloudflare.com → My Profile → API Tokens (Zone:DNS:Edit for cloudless.gr) then GitHub Settings → Secrets → `CLOUDFLARE_API_TOKEN` | — | ⬜ |
-| 3. Rotate ses-smtp-prod IAM key | `rotate-aws-key.yml` | iam_username=`ses-smtp-prod`, old_key_id=`AKIAUBXIAELU5SADA3XL`, dry_run=`true` first then `false` | ⬜ |
-| 4. Retrieve new IAM key from SSM → update GitHub secrets | see workflow summary for commands | — | ⬜ |
-| 5. cloudless.gr Keycloak cleanup | `cloudless-keycloak-cleanup.yml` | dry_run=`true` first then `false` | ⬜ blocked: needs `CLOUDLESS_PAT` + `ANTHROPIC_API_KEY` secrets set first |
-| 6. CF LB API token | dash.cloudflare.com | — | ⏸ hold until domain/app decided |
+| `gh-actions-dns-lb` | GitHub Secret `CLOUDFLARE_API_TOKEN` | Zone:DNS:Edit + Zone:Zone:Read + Zone:Load Balancing:Edit | Via `cloudflare-token-revoke.yml` + manual recreate |
+| `cert-manager-dns01` | k8s Secret `cloudflare-api-token` in `cert-manager` ns | Zone:DNS:Edit + Zone:Zone:Read | Manual: `kubectl create secret … --dry-run=client -o yaml \| kubectl apply -f -` |
 
-After step 3 runs (dry_run=false), retrieve from SSM and update secrets via CloudShell:
+Both tokens: scope to **specific zone: cloudless.gr only** (not All Zones).
+Note: Cloudflare does NOT support GitHub OIDC federation — long-lived tokens required.
+
+| Step | Action | Where | Status |
+|---|---|---|---|
+| 1 | Trigger `cloudflare-token-revoke.yml` (confirm=`revoke`) — revokes exposed GH Actions token | github.com/Themis128/omv-ha/actions | ⬜ |
+| 2 | Create **token A** `cert-manager-dns01`: Zone:DNS:Edit + Zone:Zone:Read, scope=cloudless.gr | dash.cloudflare.com → My Profile → API Tokens | ⬜ |
+| 3 | Create **token B** `gh-actions-dns-lb`: Zone:DNS:Edit + Zone:Zone:Read + Zone:LB:Edit, scope=cloudless.gr | dash.cloudflare.com → My Profile → API Tokens | ⬜ |
+| 4 | Update GitHub Secret `CLOUDFLARE_API_TOKEN` with token B | github.com/Themis128/omv-ha/settings/secrets | ⬜ |
+| 5 | Find cloudless.gr zone ID → set repo variable `CLOUDFLARE_ZONE_ID` | dash.cloudflare.com → cloudless.gr → Overview sidebar | ⬜ |
+| 6 | Update Cognito app client callbacks (see snippet above) | AWS CloudShell | ⬜ |
+| 7 | Rotate ses-smtp-prod IAM key — `rotate-aws-key.yml` (dry_run=true then false) | github.com/Themis128/omv-ha/actions | ⬜ |
+| 8 | Retrieve new IAM key from SSM → update `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | AWS CloudShell | ⬜ |
+| 9 | Add `CLOUDLESS_PAT` + `ANTHROPIC_API_KEY` secrets, then trigger `cloudless-keycloak-cleanup.yml` | github.com/Themis128/omv-ha/settings/secrets | ⬜ |
+| 10 | Create Tailscale OAuth client → add `TS_OAUTH_CLIENT_ID` + `TS_OAUTH_SECRET` | admin.tailscale.com → Settings → OAuth | ⬜ |
+| 11 | cluster-apply Pass 2 (`apply_cluster=true`) | github.com/Themis128/omv-ha/actions | ⬜ |
+| 12 | Restore cloudless.gr DNS records after drift event | dash.cloudflare.com → cloudless.gr → DNS | ⬜ |
+| 13 | Merge PR #16 | github.com/Themis128/omv-ha/pull/16 | ⬜ |
+
+After step 7 runs (dry_run=false), retrieve from SSM and update secrets via CloudShell:
 ```bash
 SSM="/github-actions/aws-key/ses-smtp-prod"
 NEW_KEY=$(aws ssm get-parameter --name "${SSM}/access-key-id" --query Parameter.Value --output text)
