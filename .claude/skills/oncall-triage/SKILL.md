@@ -13,7 +13,7 @@ allowed-tools: >
   mcp__cloudless-infra__k3s_get_pod_logs,
   mcp__cloudless-infra__k3s_restart_deployment,
   mcp__cloudless-infra__cloudflare_tunnel_status,
-  mcp__cloudless-infra__aws_check_health_checks,
+  mcp__cloudless-infra__aws_get_infrastructure_summary,
   mcp__cloudless-infra__metabase_check_health,
   mcp__cloudless-infra__ml_pipeline_status,
   mcp__Kubernetes_MCP_Server__kubectl_get,
