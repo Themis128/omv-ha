@@ -1,43 +1,15 @@
-server: https://192.168.1.128:6443
-secrets-encryption: true
-flannel-backend: wireguard-native
-tls-san:
-  - "192.168.1.200"
-  - "192.168.1.130"
+# k3s agent config for omv-ha (Pi 3B, 1 GB)
+# omv-ha was demoted from control-plane+etcd to agent-only on 2026-05-24.
+# This replaced the old server config (etcd-arg, kube-apiserver-arg, node-taint removed).
+# Deploy: copy to /etc/rancher/k3s/config.yaml on omv-ha and restart k3s-agent.
 
-# Control-plane only — prevent user workloads from scheduling on this 1 GB node.
-# etcd + apiserver + controller + scheduler consume 500–768 MB idle; no headroom for pods.
-node-taint:
-  - "node-role.kubernetes.io/control-plane:NoSchedule"
+server: https://192.168.1.200:6443   # connect via VIP — survives omv-main IP changes
 
-kube-apiserver-arg:
-  - "service-node-port-range=1000-32767"
-  - "max-requests-inflight=100"
-  - "max-mutating-requests-inflight=50"
-
-# etcd slow-disk tuning (2026-05-08)
-# Default heartbeat=100ms, election=1000ms are too tight for SD card fsync latency (~100-160ms)
-etcd-arg:
-  - "heartbeat-interval=300"
-  - "election-timeout=3000"
-  - "quota-backend-bytes=2147483648"   # 2GB
-
-kube-controller-manager-arg:
-  - "concurrent-deployment-syncs=2"
-  - "concurrent-endpoint-syncs=2"
-  - "concurrent-replicaset-syncs=2"
-  - "concurrent-resource-quota-syncs=2"
-
-kube-scheduler-arg:
-  - "kube-api-burst=20"
-  - "kube-api-qps=10"
-
+# kubelet memory limits for Pi 3B (1 GB RAM, ~700 MB allocatable after reservations)
 kubelet-arg:
   - "max-pods=20"
   - "eviction-hard=memory.available<200Mi"
   - "eviction-soft=memory.available<300Mi"
   - "eviction-soft-grace-period=memory.available=2m"
-  # kube-reserved must account for the full k3s process (etcd + apiserver + controllers).
-  # Previous 100Mi was dangerously low and caused kubelet to over-schedule.
   - "system-reserved=cpu=200m,memory=200Mi"
   - "kube-reserved=cpu=200m,memory=300Mi"

@@ -23,8 +23,7 @@ within seconds, with no DNS changes required.
 ## HA connector setup (omv-ha)
 
 The `k8s/cloudless/cloudflared-ha.yaml` manifest runs a second connector as a k8s
-Deployment on omv-ha. It tolerates the `control-plane:NoSchedule` taint so it can
-schedule on the HA node.
+Deployment on omv-ha (agent-only since 2026-05-24, no taints).
 
 **Deploy once:**
 ```bash

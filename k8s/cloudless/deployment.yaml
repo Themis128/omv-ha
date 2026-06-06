@@ -19,7 +19,7 @@ spec:
         app: cloudless
     spec:
       nodeSelector:
-        kubernetes.io/hostname: omv  # pin to omv-main: Pi5 8GB, omv-ha is Pi4 1GB
+        kubernetes.io/hostname: omv  # pin to omv-main: Pi5 8GB, omv-ha is Pi3B 1GB agent
       imagePullSecrets:
         - name: regcred-ecr
       containers:

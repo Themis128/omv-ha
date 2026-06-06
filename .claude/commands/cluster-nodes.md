@@ -21,12 +21,7 @@ kubectl get nodes -o custom-columns="NODE:.metadata.name,TAINTS:.spec.taints[*].
 
 Expected:
 - `omv` → no taints (general-purpose worker)
-- `omv-ha` → `node-role.kubernetes.io/control-plane:NoSchedule`
-
-If omv-ha is missing its taint, re-apply:
-```bash
-kubectl taint nodes omv-ha node-role.kubernetes.io/control-plane=:NoSchedule
-```
+- `omv-ha` → no taints (agent-only since 2026-05-24; control-plane taint removed at demotion)
 
 ## 3. Resource allocation
 
