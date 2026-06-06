@@ -94,27 +94,32 @@ bash k8s/ha/scripts/grant-iam-all.sh   # CloudShell-compatible (no --profile nee
 - Rotate exposed IAM key `AKIAUBXIAELU5SADA3XL` (ses-smtp-prod) → use `rotate-aws-key.yml` workflow
 
 **⚠️ CREDENTIAL ROTATION REQUIRED — publicly exposed in git history (commit 5d2e355, master, ~2026-05-09):**
-The following live credentials were committed to `k8s/n8n/n8n.yaml` and remain in public git history.
-The file has been fixed (PR #15) but history must be scrubbed and all keys rotated.
+The file has been fixed (PR #15). History scrubbed locally on 2026-06-06 — force-push from local machine to complete.
 
 | Credential | Where to rotate |
 |---|---|
-| Anthropic API key `sk-ant-api03-KRg...` | console.anthropic.com → API Keys |
-| Notion token `ntn_336915499627...` | notion.so/my-integrations → revoke + recreate |
-| Slack webhook `hooks.slack.com/services/T09AF5VTK4G/...` | api.slack.com/apps → Incoming Webhooks → revoke |
-| AWS key `AKIAUBXIAELUYMUPWXLG` (omv-main-cli user) | AWS IAM → deactivate + create new key |
-| n8n encryption key `e050271f...` | generate new: `openssl rand -hex 32`, re-encrypt existing workflows |
+| Anthropic API key (n8n) | console.anthropic.com → API Keys |
+| Notion token (n8n) | notion.so/my-integrations → revoke + recreate |
+| Slack webhook (n8n) | api.slack.com/apps → Incoming Webhooks → revoke |
+| AWS key AKIAUBXIAELUYMUPWXLG (omv-main-cli user) | AWS IAM → deactivate + create new key |
+| n8n encryption key | generate new: `openssl rand -hex 32`, re-encrypt existing workflows |
 
-After rotating all keys, scrub git history and force-push master:
+**Force-push to complete the history scrub (run from a local clone):**
 ```bash
-# From a local clone with write access:
-git filter-repo --replace-text <(printf \
-  'REDACTED_ANTHROPIC_KEY==>REDACTED_ANTHROPIC_KEY\n
-  REDACTED_NOTION_TOKEN==>REDACTED_NOTION_TOKEN\n
-  REDACTED_AWS_SECRET_OMVMAINCLI==>REDACTED_AWS_SECRET\n
-  REDACTED_N8N_ENCRYPTION_KEY==>REDACTED_N8N_KEY') \
-  --force
+# 1. Clone fresh
+git clone https://github.com/Themis128/omv-ha.git omv-ha-scrub && cd omv-ha-scrub
+
+# 2. Install git-filter-repo if needed
+pip3 install git-filter-repo
+
+# 3. Create replacements file with the actual exposed values
+#    (get them from the commit: git show 5d2e355 -- k8s/n8n/n8n.yaml)
+#    Then run:
+git filter-repo --replace-text replacements.txt --force
+
+# 4. Force-push all branches
 git push origin master --force-with-lease
+git push origin claude/node-architecture-research-fuYGh --force-with-lease
 ```
 
 **Tailscale OAuth (only needed when cluster SSH access via CI is required):**
