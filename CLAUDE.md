@@ -39,6 +39,8 @@ creating a separate task for every small change.
 | `cognito-user-ops` | User lifecycle management | `<action> <email>` |
 | `cognito-app-client` | Auth failure diagnosis + client mgmt | `diagnose\|update-callbacks\|…` |
 | `cms-content` | Public CMS content audit + fix AI dashes + publish | `audit\|fix-dashes <db>\|publish <id>\|list <db>` |
+| `cognito-migration` | Remove all Keycloak dead code from cloudless.gr + replace register/resend with Cognito | `dry-run\|apply` |
+| `tailscale-oauth-setup` | Set up TS_OAUTH_CLIENT_ID, TS_OAUTH_SECRET, PI_SSH_KEY for CI→cluster access | *(no args)* |
 
 ## Cluster node topology (updated 2026-05-24 demotion)
 
@@ -69,6 +71,8 @@ Key invariants to maintain (post-demotion state):
 | Tailscale OAuth | `.github/workflows/tailscale-connect.yml` | Reusable workflow for Tailscale in CI — needs `TS_OAUTH_CLIENT_ID` + `TS_OAUTH_SECRET` secrets |
 | AWS key rotation | `.github/workflows/rotate-aws-key.yml` | Rotate IAM keys via OIDC — needs `grant-iam-all.sh` run first |
 | Pi runner restart | `.github/workflows/restart-pi-runners.yml` | Restart/re-register self-hosted runners on omv-2/omv-3 |
+| kubectl dispatch | `.github/workflows/kubectl-dispatch.yml` | Run any kubectl command on k3s via Tailscale SSH — needs `TS_OAUTH_*` + `PI_SSH_KEY` |
+| CF token revoke | `.github/workflows/cloudflare-token-revoke.yml` | Self-revoke CLOUDFLARE_API_TOKEN via Cloudflare API (no dashboard needed) |
 
 ## Pending credential / provisioning steps
 
