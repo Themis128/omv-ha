@@ -1,10 +1,10 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: oncall-cloudless-online-tls
+  name: oncall-gr-tls
   namespace: oncall
 spec:
-  secretName: oncall-cloudless-online-tls
+  secretName: oncall-gr-tls
   issuerRef:
     name: letsencrypt-cloudflare
     kind: ClusterIssuer
@@ -42,7 +42,7 @@ spec:
   tls:
   - hosts:
     - oncall.cloudless.gr
-    secretName: oncall-cloudless-online-tls
+    secretName: oncall-gr-tls
 ---
 # ── Admin ingress (PROTECTED — rate-limit + basicauth) ───────────────────────
 # Covers everything not matched by the webhook ingress above.
@@ -74,4 +74,4 @@ spec:
   tls:
   - hosts:
     - oncall.cloudless.gr
-    secretName: oncall-cloudless-online-tls
+    secretName: oncall-gr-tls

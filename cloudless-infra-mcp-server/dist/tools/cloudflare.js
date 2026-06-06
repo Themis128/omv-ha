@@ -534,7 +534,7 @@ Returns systemd status + recent log lines + active connections.`,
         title: "K3s TLS Certificates Status",
         description: `Check cert-manager Certificate resources in K3s.
 Shows all certs across all namespaces: Ready state, expiry, issuer.
-Current certs: cloudless-online-tls, auth-cloudless-online-tls.`,
+Current certs: cloudless-gr-tls, auth-cloudless-gr-tls.`,
         inputSchema: z.object({}),
         annotations: { readOnlyHint: true, destructiveHint: false },
     }, async () => {

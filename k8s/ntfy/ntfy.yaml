@@ -109,10 +109,10 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: ntfy-cloudless-online-tls
+  name: ntfy-gr-tls
   namespace: ntfy
 spec:
-  secretName: ntfy-cloudless-online-tls
+  secretName: ntfy-gr-tls
   issuerRef:
     name: letsencrypt-cloudflare
     kind: ClusterIssuer
@@ -132,7 +132,7 @@ spec:
   tls:
     - hosts:
         - ntfy.cloudless.gr
-      secretName: ntfy-cloudless-online-tls
+      secretName: ntfy-gr-tls
   rules:
     - host: ntfy.cloudless.gr
       http:

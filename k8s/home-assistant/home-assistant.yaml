@@ -90,10 +90,10 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: ha-cloudless-online-tls
+  name: ha-gr-tls
   namespace: home-assistant
 spec:
-  secretName: ha-cloudless-online-tls
+  secretName: ha-gr-tls
   issuerRef:
     name: letsencrypt-cloudflare
     kind: ClusterIssuer
@@ -113,7 +113,7 @@ spec:
   tls:
     - hosts:
         - ha.cloudless.gr
-      secretName: ha-cloudless-online-tls
+      secretName: ha-gr-tls
   rules:
     - host: ha.cloudless.gr
       http:

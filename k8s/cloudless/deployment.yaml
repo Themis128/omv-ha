@@ -78,10 +78,10 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: cloudless-online-tls
+  name: cloudless-gr-tls
   namespace: cloudless
 spec:
-  secretName: cloudless-online-tls
+  secretName: cloudless-gr-tls
   issuerRef:
     name: letsencrypt-cloudflare
     kind: ClusterIssuer
@@ -103,7 +103,7 @@ spec:
     - hosts:
         - cloudless.gr
         - www.cloudless.gr
-      secretName: cloudless-online-tls
+      secretName: cloudless-gr-tls
   rules:
     - host: cloudless.gr
       http:
