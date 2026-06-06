@@ -1,6 +1,6 @@
 # Deploy-Pi CI/CD Pipeline
 
-Automated build + rollout for `cloudless-pi-app` (serving `cloudless.online`) via GitHub Actions.
+Automated build + rollout for `cloudless-pi-app` (serving `cloudless.gr`) via GitHub Actions.
 
 ## Architecture
 
@@ -77,7 +77,7 @@ sudo k3s kubectl get deployment cloudless -n cloudless \
 sudo k3s kubectl rollout status deployment/cloudless -n cloudless
 
 # App responding
-curl -s -o /dev/null -w "%{http_code}" https://cloudless.online/
+curl -s -o /dev/null -w "%{http_code}" https://cloudless.gr/
 # expects: 307 (HTTPS redirect)
 ```
 

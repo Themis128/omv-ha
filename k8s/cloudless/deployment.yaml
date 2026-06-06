@@ -86,8 +86,8 @@ spec:
     name: letsencrypt-cloudflare
     kind: ClusterIssuer
   dnsNames:
-    - cloudless.online
-    - www.cloudless.online
+    - cloudless.gr
+    - www.cloudless.gr
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -101,11 +101,11 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - cloudless.online
-        - www.cloudless.online
+        - cloudless.gr
+        - www.cloudless.gr
       secretName: cloudless-online-tls
   rules:
-    - host: cloudless.online
+    - host: cloudless.gr
       http:
         paths:
           - path: /
@@ -115,7 +115,7 @@ spec:
                 name: cloudless
                 port:
                   number: 3000
-    - host: www.cloudless.online
+    - host: www.cloudless.gr
       http:
         paths:
           - path: /

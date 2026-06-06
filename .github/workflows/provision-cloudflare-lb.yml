@@ -13,7 +13,7 @@ name: Provision Cloudflare Load Balancer
 #   CLOUDFLARE_ZONE_ID     — Zone ID for the hostname being load-balanced
 #
 # Inputs:
-#   hostname       — e.g. "cloudless.gr" or "api.cloudless.online"
+#   hostname       — e.g. "cloudless.gr" or "api.cloudless.gr"
 #   primary_origin — e.g. "dxxxxxxxxxxxx.cloudfront.net" or an IP
 #   secondary_origin — e.g. IPv6 address or hostname for Pi fallback
 

@@ -2,7 +2,7 @@
 description: Check Cognito User Pool configuration, app clients, Lambda triggers, and MFA status
 ---
 
-Audit the cloudless.online Cognito User Pool configuration. All commands use
+Audit the cloudless.gr Cognito User Pool configuration. All commands use
 `AWS_PROFILE=admin` and region `us-east-1`.
 
 ```bash
@@ -32,7 +32,7 @@ aws cognito-idp describe-user-pool \
     }'
 ```
 
-**Expected configuration for cloudless.online:**
+**Expected configuration for cloudless.gr:**
 - `mfa_config`: `OPTIONAL` (users can enable TOTP; not forced)
 - `password_policy`: min 8 chars, `RequireUppercase/Numbers/Symbols: true`
 - `username_attrs`: `["email"]` (sign in with email, not username)
@@ -78,7 +78,7 @@ aws cognito-idp describe-user-pool-client \
 - `has_secret`: `false` (public client — no secret)
 - `auth_flows`: includes `ALLOW_USER_SRP_AUTH`, `ALLOW_REFRESH_TOKEN_AUTH`
 - `oauth_flows`: `["code"]` (authorization code + PKCE)
-- `callback_urls`: includes `https://cloudless.online/api/auth/callback/cognito`
+- `callback_urls`: includes `https://cloudless.gr/api/auth/callback/cognito`
 - `prevent_reuse`: `ENABLED` (prevents username enumeration attacks)
 
 ## 3. Lambda triggers
@@ -147,6 +147,6 @@ aws cloudtrail lookup-events \
 
 **Quick-flag items:**
 - `has_secret: true` on the Next.js client → misconfigured (public clients must not have secrets)
-- `callback_urls` missing `cloudless.online` → auth redirects will fail
+- `callback_urls` missing `cloudless.gr` → auth redirects will fail
 - Lambda trigger function in `Inactive` state → sign-up flow broken
 - `mfa_config: OFF` → MFA entirely disabled, cannot be enabled per-user

@@ -6,7 +6,7 @@ metadata:
   namespace: oncall
 spec:
   dnsNames:
-    - oncall.cloudless.online
+    - oncall.cloudless.gr
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-cloudflare
@@ -25,7 +25,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: oncall.cloudless.online
+    - host: oncall.cloudless.gr
       http:
         paths:
           - path: /
@@ -37,7 +37,7 @@ spec:
                   number: 8080
   tls:
     - hosts:
-        - oncall.cloudless.online
+        - oncall.cloudless.gr
       secretName: oncall-cloudless-online-tls
 ---
 apiVersion: networking.k8s.io/v1
@@ -53,7 +53,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: oncall.cloudless.online
+    - host: oncall.cloudless.gr
       http:
         paths:
           - path: /integrations/
@@ -65,5 +65,5 @@ spec:
                   number: 8080
   tls:
     - hosts:
-        - oncall.cloudless.online
+        - oncall.cloudless.gr
       secretName: oncall-cloudless-online-tls

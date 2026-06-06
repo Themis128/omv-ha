@@ -57,6 +57,6 @@ Invoke-Expression "$SSH 'kubectl rollout status deployment/n8n -n n8n --timeout=
 Write-Host "`n=== Status ===" -ForegroundColor Cyan
 Invoke-Expression "$SSH 'kubectl get pods,svc,ingress,certificate -n n8n'"
 
-Write-Host "`n✅ n8n deployed at https://n8n.cloudless.online" -ForegroundColor Green
+Write-Host "`n✅ n8n deployed at https://n8n.cloudless.gr" -ForegroundColor Green
 Write-Host "   Import workflows from: k8s\n8n\workflows\analytics-to-notion.json" -ForegroundColor Gray
 Write-Host "   Configure credentials: Notion API, Anthropic (Header Auth), Slack Webhook" -ForegroundColor Gray

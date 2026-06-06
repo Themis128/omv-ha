@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-cognito-users.py — List all Cognito users for cloudless.online
+cognito-users.py — List all Cognito users for cloudless.gr
 
 Usage:
     AWS_PROFILE=admin COGNITO_POOL_ID=us-east-1_XXXX python3 cognito-users.py
@@ -172,7 +172,7 @@ def print_summary(all_users, active_users):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="List Cognito users for cloudless.online")
+    parser = argparse.ArgumentParser(description="List Cognito users for cloudless.gr")
     parser.add_argument("--active", action="store_true", help="Show only active (CONFIRMED + enabled) users")
     parser.add_argument("--json", action="store_true", dest="json_out", help="Output raw JSON")
     parser.add_argument("--groups", action="store_true", help="Fetch group membership (slower)")

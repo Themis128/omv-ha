@@ -1,8 +1,8 @@
 ---
-description: Search, list, and inspect Cognito users in the cloudless.online User Pool
+description: Search, list, and inspect Cognito users in the cloudless.gr User Pool
 ---
 
-Query users in the cloudless.online Cognito User Pool. All commands run locally
+Query users in the cloudless.gr Cognito User Pool. All commands run locally
 with `AWS_PROFILE=admin` and region `us-east-1`.
 
 The User Pool ID is stored as the GitHub secret `NEXT_PUBLIC_COGNITO_USER_POOL_ID`

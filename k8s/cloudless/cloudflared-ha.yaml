@@ -22,11 +22,11 @@ data:
     protocol: http2
 
     ingress:
-      - hostname: cloudless.online
+      - hostname: cloudless.gr
         service: https://192.168.1.200:18443
         originRequest:
           noTLSVerify: true
-      - hostname: "*.cloudless.online"
+      - hostname: "*.cloudless.gr"
         service: https://192.168.1.200:18443
         originRequest:
           noTLSVerify: true

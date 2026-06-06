@@ -1,6 +1,6 @@
 # OMV-HA — Cloudless k3s Cluster
 
-Two-node embedded-etcd k3s cluster running on Raspberry Pi hardware, serving [cloudless.online](https://cloudless.online) and acting as the secondary path for [cloudless.gr](https://cloudless.gr).
+Two-node embedded-etcd k3s cluster running on Raspberry Pi hardware, serving [cloudless.gr](https://cloudless.gr) and acting as the secondary path for [cloudless.gr](https://cloudless.gr).
 
 ## Nodes
 
@@ -70,7 +70,7 @@ Set with `gh secret set NAME` (secrets) or `gh variable set NAME --body VALUE` (
 | `TS_OAUTH_CLIENT_ID` | Secret | `tailscale-connect.yml` | Tailscale admin → Settings → OAuth Clients → scope: `auth_keys` |
 | `TS_OAUTH_SECRET` | Secret | `tailscale-connect.yml` | Same OAuth client creation as above |
 | `CLOUDFLARE_ACCOUNT_ID` | Variable | `provision-cloudflare-lb.yml` | `fb7dc7b69b662480cd5961a4d1913c78` |
-| `CLOUDFLARE_ZONE_ID` | Variable | `provision-cloudflare-lb.yml` | Zone ID for the target hostname (cloudless.online: `aa875388a91714c369b1e20107e643f5`) |
+| `CLOUDFLARE_ZONE_ID` | Variable | `provision-cloudflare-lb.yml` | cloudless.gr zone ID — find at dash.cloudflare.com → cloudless.gr → Overview (right sidebar) |
 
 ## Deploy order (fresh cluster)
 
@@ -111,7 +111,7 @@ kubectl apply -f k8s/monitoring/analytics-prometheusrules.yaml
 
 ## Cloudflare Tunnel
 
-All `*.cloudless.online` traffic enters via a Cloudflare tunnel (`cloudflared` on omv-main, tunnel ID `a82f24a8`). There is no public IPv4 inbound — only the tunnel and IPv6.
+All `*.cloudless.gr` traffic enters via a Cloudflare tunnel (`cloudflared` on omv-main, tunnel ID `a82f24a8`). There is no public IPv4 inbound — only the tunnel and IPv6.
 
 ## cloudless.gr failover
 

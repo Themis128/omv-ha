@@ -190,8 +190,8 @@ Shortcut — no need to know the exact pod name or namespace.`,
   server.registerTool(
     "k3s_check_cloudless_app",
     {
-      title: "Check cloudless.online App (K3s Deployment)",
-      description: `Check the cloudless.online Next.js app running as a K3s deployment in the cloudless namespace.
+      title: "Check cloudless.gr App (K3s Deployment)",
+      description: `Check the cloudless.gr Next.js app running as a K3s deployment in the cloudless namespace.
 Returns: pod status, service, ingress, health check via Traefik VIP, and current IPv6 address.`,
       inputSchema: z.object({}),
       annotations: { readOnlyHint: true, destructiveHint: false },
@@ -201,7 +201,7 @@ Returns: pod status, service, ingress, health check via Traefik VIP, and current
         `echo '=== Pods ===' && ${KUBECTL} get pods -n cloudless -o wide` +
         ` && echo '=== Service ===' && ${KUBECTL} get service -n cloudless` +
         ` && echo '=== Ingress ===' && ${KUBECTL} get ingress -n cloudless` +
-        ` && echo '=== Health Check ===' && curl -sk -H 'Host: cloudless.online' https://localhost:18443/api/health 2>&1 | head -20 || echo 'health check failed'` +
+        ` && echo '=== Health Check ===' && curl -sk -H 'Host: cloudless.gr' https://localhost:18443/api/health 2>&1 | head -20 || echo 'health check failed'` +
         ` && echo '=== Current IPv6 ===' && ip -6 addr show | grep 'scope global' | awk '{print $2}' | cut -d/ -f1`;
 
       const r = await runOnNode(K3S_NODE, cmd);

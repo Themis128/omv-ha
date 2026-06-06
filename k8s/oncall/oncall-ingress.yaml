@@ -9,7 +9,7 @@ spec:
     name: letsencrypt-cloudflare
     kind: ClusterIssuer
   dnsNames:
-    - oncall.cloudless.online
+    - oncall.cloudless.gr
 ---
 # ── Webhook ingress (PUBLIC — rate-limited only) ──────────────────────────────
 # /integrations/v1/<token>/ paths receive inbound alerts from external sources
@@ -29,7 +29,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-  - host: oncall.cloudless.online
+  - host: oncall.cloudless.gr
     http:
       paths:
       - path: /integrations/
@@ -41,7 +41,7 @@ spec:
               number: 8080
   tls:
   - hosts:
-    - oncall.cloudless.online
+    - oncall.cloudless.gr
     secretName: oncall-cloudless-online-tls
 ---
 # ── Admin ingress (PROTECTED — rate-limit + basicauth) ───────────────────────
@@ -61,7 +61,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-  - host: oncall.cloudless.online
+  - host: oncall.cloudless.gr
     http:
       paths:
       - path: /
@@ -73,5 +73,5 @@ spec:
               number: 8080
   tls:
   - hosts:
-    - oncall.cloudless.online
+    - oncall.cloudless.gr
     secretName: oncall-cloudless-online-tls

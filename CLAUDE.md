@@ -84,7 +84,7 @@ bash k8s/ha/scripts/grant-iam-all.sh   # CloudShell-compatible (no --profile nee
 
 **apply-keycloak-removal.yml status:**
 - ✅ Pass 1 COMPLETE — Cognito client `cloudless-oauth2-proxy` (ID: `63d3fu5lp057694h0t70je4jk0`) exists; secret stored in SSM `/cloudless/production/oauth2-proxy-client-secret`
-- ⏸ Pass 2 DEFERRED — `cluster-apply` job needs Tailscale secrets; also `cloudless.online` domain is gone (2026-06-04), making oauth2-proxy deployment moot until domain/app is restored. Delete keycloak namespace manually when SSH access is available.
+- ⏸ Pass 2 DEFERRED — `cluster-apply` job needs Tailscale secrets; app subdomain routing (manage.cloudless.gr) must also be configured before oauth2-proxy is useful. Delete keycloak namespace manually when SSH access is available.
 
 **Credential rotation — trigger via GitHub Actions UI (Actions tab → Run workflow):**
 All IAM permissions already granted (`grant-iam-all.sh` ✅ 2026-06-04). Execute in order:
@@ -248,7 +248,7 @@ Last known-good snapshot: SHA `b180250723fbb9bdbee1f7aba945dd7e4d9724afe22fc6d7c
 | `cloudless.gr` SPF | `v=spf1 include:amazonses.com ~all` | SES send authorized |
 | `cloudless.gr` DMARC | `v=DMARC1; p=none; rua=mailto:dmarc@cloudless.gr; pct=100; adkim=s; aspf=s` | ⚠️ Strict DKIM+SPF alignment — DKIM missing causes DMARC fail on all SES mail |
 | `cloudless.gr` DKIM | **empty / NXDOMAIN** (`_domainkey`) | ⚠️ SES DKIM CNAMEs not published — deliverability broken |
-| `cloudless.online` | **NXDOMAIN (all records)** | Domain gone since 2026-06-04; NS@TLD SOA also gone by 13:05 same day |
+| `cloudless.gr` www | same A/AAAA as apex | Removed by DNS drift event 17:04 — restore via Cloudflare dashboard |
 
 **⚠️ DKIM deliverability gap:** DMARC uses `adkim=s` (strict alignment) but no DKIM records are published.
 This means every outgoing email from SES fails DMARC. Fix:

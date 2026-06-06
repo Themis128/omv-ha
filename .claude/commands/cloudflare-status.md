@@ -1,5 +1,5 @@
 ---
-description: Check Cloudflare tunnel connectors, DNS resolution, and Load Balancer health for cloudless.online
+description: Check Cloudflare tunnel connectors, DNS resolution, and Load Balancer health for cloudless.gr
 ---
 
 Audit the Cloudflare layer: tunnel connectors, DNS, and LB pool health.
@@ -43,8 +43,8 @@ Use `mcp__cloudless-infra__aws_check_health_checks` or run:
 
 ```bash
 # From omv-main — verify CNAME chain resolves
-dig +short grafana.cloudless.online
-dig +short cloudless.online
+dig +short grafana.cloudless.gr
+dig +short cloudless.gr
 ```
 
 Expected: CNAME to `<tunnel-id>.cfargotunnel.com` (or Cloudflare Anycast IPs for proxied records).
@@ -77,7 +77,7 @@ Tunnel (a82f24a8):
   Connectors active:   N/2
 
 DNS:
-  cloudless.online     ✅/❌  [resolves to CF IPs | NXDOMAIN]
+  cloudless.gr     ✅/❌  [resolves to CF IPs | NXDOMAIN]
   grafana.*            ✅/❌
 
 Load Balancer:

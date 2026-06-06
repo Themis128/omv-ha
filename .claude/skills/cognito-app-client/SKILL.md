@@ -1,7 +1,7 @@
 ---
 name: cognito-app-client
 description: >
-  Manage Cognito app clients and diagnose authentication failures for cloudless.online.
+  Manage Cognito app clients and diagnose authentication failures for cloudless.gr.
   Create new clients, update OAuth callback URLs, rotate secrets (confidential clients only),
   diagnose JWT validation errors, and trace auth flow failures.
   Use when login is broken, a new app needs Cognito auth, or callback URLs change.
@@ -11,7 +11,7 @@ allowed-tools: Bash, Read
 
 # Cognito App Client Skill
 
-Manages app clients and traces auth failures for the cloudless.online Cognito User Pool (`us-east-1`).
+Manages app clients and traces auth failures for the cloudless.gr Cognito User Pool (`us-east-1`).
 
 ## Step 0 — Setup
 
@@ -43,7 +43,7 @@ aws cognito-idp describe-user-pool-client \
 **Check 2 — Verify callback URL is registered:**
 
 The Next.js app uses NextAuth.js with Cognito provider. The callback URL pattern is:
-`https://cloudless.online/api/auth/callback/cognito`
+`https://cloudless.gr/api/auth/callback/cognito`
 
 ```bash
 aws cognito-idp describe-user-pool-client \
@@ -53,7 +53,7 @@ aws cognito-idp describe-user-pool-client \
   --query 'UserPoolClient.CallbackURLs'
 ```
 
-If `https://cloudless.online/api/auth/callback/cognito` is missing → auth redirects will fail
+If `https://cloudless.gr/api/auth/callback/cognito` is missing → auth redirects will fail
 with `redirect_mismatch` error. Fix: add it (see `update-callbacks` action).
 
 **Check 3 — Auth flows include ALLOW_USER_SRP_AUTH:**
@@ -110,7 +110,7 @@ echo "$TRIGGERS"
 Gets the existing list, merges in the new URL(s), and applies the update.
 
 ```bash
-NEW_URL="https://cloudless.online/api/auth/callback/cognito"
+NEW_URL="https://cloudless.gr/api/auth/callback/cognito"
 
 # Get existing callback + logout URLs
 EXISTING=$(aws cognito-idp describe-user-pool-client \
@@ -158,8 +158,8 @@ aws cognito-idp create-user-pool-client \
   --allowed-o-auth-flows code \
   --allowed-o-auth-scopes openid email profile \
   --allowed-o-auth-flows-user-pool-client \
-  --callback-urls "https://cloudless.online/api/auth/callback/cognito" \
-  --logout-urls "https://cloudless.online" \
+  --callback-urls "https://cloudless.gr/api/auth/callback/cognito" \
+  --logout-urls "https://cloudless.gr" \
   --supported-identity-providers COGNITO \
   --prevent-user-existence-errors ENABLED \
   --enable-token-revocation \

@@ -83,7 +83,7 @@ alertmanager:
           matchers: [alertname = "Watchdog"]
         - receiver: "null"
           matchers: [alertname = "InfoInhibitor"]
-        # ntfy: critical alerts → immediate push to ntfy.cloudless.online/alerts (continue fan-out)
+        # ntfy: critical alerts → immediate push to ntfy.cloudless.gr/alerts (continue fan-out)
         - receiver: "ntfy-alerts"
           matchers: [severity = "critical"]
           continue: true
@@ -254,7 +254,7 @@ grafana:
 
   grafana.ini:
     server:
-      root_url: "https://grafana.cloudless.online"
+      root_url: "https://grafana.cloudless.gr"
       enable_gzip: true
 
     # SQLite WAL: critical for alert-state write performance on ARM

@@ -60,12 +60,12 @@ export function registerCloudflareTools(server: McpServer): void {
     "cloudflare_list_dns_records",
     {
       title: "Cloudflare — List DNS Records",
-      description: `List all DNS records for cloudless.online.
+      description: `List all DNS records for cloudless.gr.
 Returns record ID, type, name, content, TTL, and proxied status.
 Always run this before adding or deleting records to check current state.`,
       inputSchema: z.object({
         type: z.enum(["A", "AAAA", "CNAME", "TXT", "MX", "NS"]).optional(),
-        name: z.string().optional().describe('e.g. "auth.cloudless.online"'),
+        name: z.string().optional().describe('e.g. "auth.cloudless.gr"'),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -108,7 +108,7 @@ Always run this before adding or deleting records to check current state.`,
     "cloudflare_add_dns_record",
     {
       title: "Cloudflare — Add DNS Record",
-      description: `Add a new DNS record to cloudless.online.
+      description: `Add a new DNS record to cloudless.gr.
 Supports A, AAAA, CNAME, TXT. For tunnel CNAMEs use content="<tunnel-id>.cfargotunnel.com".`,
       inputSchema: z.object({
         type: z.enum(["A", "AAAA", "CNAME", "TXT"]),
@@ -211,7 +211,7 @@ Use cloudflare_list_dns_records first to get the record ID.`,
     "cloudflare_purge_cache",
     {
       title: "Cloudflare — Purge Cache",
-      description: `Purge Cloudflare edge cache for cloudless.online.
+      description: `Purge Cloudflare edge cache for cloudless.gr.
 Use purge_everything=true to wipe all cached assets (use after major deploys).
 Or provide specific URLs to purge individual files.
 Note: purge_everything counts against rate limit — don't run in loops.`,
@@ -224,7 +224,7 @@ Note: purge_everything counts against rate limit — don't run in loops.`,
           .array(z.string())
           .optional()
           .describe(
-            "Specific URLs to purge, e.g. ['https://cloudless.online/index.html']",
+            "Specific URLs to purge, e.g. ['https://cloudless.gr/index.html']",
           ),
       }),
       annotations: {
@@ -242,7 +242,7 @@ Note: purge_everything counts against rate limit — don't run in loops.`,
       if (!data.success)
         return { content: [{ type: "text", text: `❌ ${cfError(data)}` }] };
       const msg = purge_everything
-        ? "✅ Entire cache purged for cloudless.online"
+        ? "✅ Entire cache purged for cloudless.gr"
         : `✅ Purged ${files?.length ?? 0} URL(s) from cache`;
       return { content: [{ type: "text", text: msg }] };
     },
@@ -253,7 +253,7 @@ Note: purge_everything counts against rate limit — don't run in loops.`,
     "cloudflare_zone_analytics",
     {
       title: "Cloudflare — Zone Analytics",
-      description: `Get traffic analytics for cloudless.online via Cloudflare GraphQL API.
+      description: `Get traffic analytics for cloudless.gr via Cloudflare GraphQL API.
 Returns: requests, bandwidth, cached %, threats, unique visitors.
 Default: last 24 hours. Requires Zone Analytics:Read on the token.`,
       inputSchema: z.object({
@@ -378,7 +378,7 @@ Default: last 24 hours. Requires Zone Analytics:Read on the token.`,
       const bwCachedMb = (totals.cachedBytes / 1024 / 1024).toFixed(2);
 
       const text = [
-        `## cloudless.online — last ${since_hours}h analytics (${groups.length} hourly buckets)`,
+        `## cloudless.gr — last ${since_hours}h analytics (${groups.length} hourly buckets)`,
         ``,
         `Requests:   ${totals.requests.toLocaleString()} total  (${totals.cachedRequests.toLocaleString()} cached = ${cachedPct}%)`,
         `Bandwidth:  ${bwMb} MB total  (${bwCachedMb} MB cached)`,
@@ -395,7 +395,7 @@ Default: last 24 hours. Requires Zone Analytics:Read on the token.`,
     "cloudflare_zone_settings",
     {
       title: "Cloudflare — Zone Settings",
-      description: `Get key security and performance settings for cloudless.online zone.
+      description: `Get key security and performance settings for cloudless.gr zone.
 Shows: SSL mode, security level, min TLS version, HTTP/2, HTTP/3, HSTS, brotli, rocket loader.
 Useful for diagnosing TLS issues, checking caching mode, or verifying security posture.`,
       inputSchema: z.object({}),
@@ -435,7 +435,7 @@ Useful for diagnosing TLS issues, checking caching mode, or verifying security p
         content: [
           {
             type: "text",
-            text: `## cloudless.online zone settings\n\n${results.join("\n")}`,
+            text: `## cloudless.gr zone settings\n\n${results.join("\n")}`,
           },
         ],
       };
@@ -653,7 +653,7 @@ Requires "User API Tokens:Edit" permission.`,
     "cloudflare_worker_routes",
     {
       title: "Cloudflare — Worker Routes",
-      description: `List all Worker routes for cloudless.online.
+      description: `List all Worker routes for cloudless.gr.
 Shows which URL patterns are handled by which Worker scripts.
 Useful for verifying cloudless-edge Worker is wired to the correct paths.`,
       inputSchema: z.object({}),

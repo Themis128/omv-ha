@@ -16,4 +16,5 @@ spec:
             key: api-token
       selector:
         dnsZones:
-        - cloudless.online
+        - cloudless.gr
+        - "*.cloudless.gr"

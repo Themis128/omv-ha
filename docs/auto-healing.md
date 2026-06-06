@@ -49,7 +49,7 @@ Every 2 minutes, checks three things in sequence:
 
 2. **Traefik VIP** — `curl https://192.168.1.200:18443/`. If no HTTP response (or `000`), marks Traefik FAIL.
 
-3. **App health endpoint** — `curl https://cloudless.online/api/health`. Passes if response contains `ok`.
+3. **App health endpoint** — `curl https://cloudless.gr/api/health`. Passes if response contains `ok`.
 
 ### Output format
 

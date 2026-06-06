@@ -1,7 +1,7 @@
 ---
 name: cognito-user-ops
 description: >
-  User lifecycle management for the cloudless.online Cognito User Pool.
+  User lifecycle management for the cloudless.gr Cognito User Pool.
   Create, confirm, reset passwords, enable/disable, manage group membership, and delete users.
   Requires AWS_PROFILE=admin or appropriate IAM role.
   Use for support requests, onboarding, and account recovery.
@@ -11,7 +11,7 @@ allowed-tools: Bash, Read
 
 # Cognito User Operations Skill
 
-Manages user accounts in the cloudless.online Cognito User Pool (`us-east-1`).
+Manages user accounts in the cloudless.gr Cognito User Pool (`us-east-1`).
 
 ## Step 0 — Setup
 

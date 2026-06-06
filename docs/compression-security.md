@@ -40,7 +40,7 @@ additionalArguments:
 ### Test
 
 ```bash
-curl -skL -H "Host: auth.cloudless.online" -H "Accept-Encoding: br, gzip" \
+curl -skL -H "Host: auth.cloudless.gr" -H "Accept-Encoding: br, gzip" \
   -o /dev/null -D - https://192.168.1.200:18443/ | grep content-encoding
 # content-encoding: br
 ```

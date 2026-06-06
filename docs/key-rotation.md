@@ -173,8 +173,8 @@ NEW_CLIENT=$(aws cognito-idp create-user-pool-client \
   --allowed-o-auth-flows code \
   --allowed-o-auth-scopes openid email profile \
   --allowed-o-auth-flows-user-pool-client \
-  --callback-urls "https://manage.cloudless.online/oauth2/callback" \
-  --logout-urls "https://manage.cloudless.online" \
+  --callback-urls "https://manage.cloudless.gr/oauth2/callback" \
+  --logout-urls "https://manage.cloudless.gr" \
   --supported-identity-providers COGNITO \
   --region "$REGION" --profile "$PROFILE" \
   | jq '{client_id: .UserPoolClient.ClientId, client_secret: .UserPoolClient.ClientSecret}')
@@ -200,7 +200,7 @@ kubectl patch deployment oauth2-proxy -n cloudless --type=json \
 kubectl rollout restart deployment/oauth2-proxy -n cloudless
 kubectl rollout status deployment/oauth2-proxy -n cloudless
 
-# 5. Verify login works at https://manage.cloudless.online, then delete old client
+# 5. Verify login works at https://manage.cloudless.gr, then delete old client
 OLD_CLIENT_ID="<previous client id>"
 aws cognito-idp delete-user-pool-client \
   --user-pool-id "$POOL_ID" \

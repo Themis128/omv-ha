@@ -136,7 +136,7 @@ kubectl port-forward -n monitoring svc/monitoring-prometheus 9090:9090 &
 curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.health != "up") | {job: .labels.job, instance: .labels.instance, error: .lastError}'
 ```
 
-Or check via Grafana at `https://grafana.cloudless.online`.
+Or check via Grafana at `https://grafana.cloudless.gr`.
 
 If a ServiceMonitor target is down:
 1. Verify the service/pod is Running
@@ -172,7 +172,7 @@ If >80% → increase `retentionSize` in `kube-prometheus-stack-values.yaml` or r
 After investigation, classify:
 
 **CRITICAL** (page immediately):
-- cloudless.online returning 5xx / not reachable
+- cloudless.gr returning 5xx / not reachable
 - Cloudflare tunnel down (zero connectors)
 - Prometheus down for >15 min (blind monitoring)
 - Both cluster nodes NotReady

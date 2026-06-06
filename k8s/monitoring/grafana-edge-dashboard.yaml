@@ -11,7 +11,7 @@ data:
   edge-computing.json: |
     {
       "annotations": {"list": [{"builtIn": 1, "datasource": {"type": "grafana", "uid": "-- Grafana --"}, "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "type": "dashboard"}]},
-      "description": "Traefik ingress traffic, latency, TLS cert expiry, and node network I/O — edge view of the cloudless.online cluster.",
+      "description": "Traefik ingress traffic, latency, TLS cert expiry, and node network I/O — edge view of the cloudless.gr cluster.",
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 1,
