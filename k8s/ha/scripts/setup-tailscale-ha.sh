@@ -24,11 +24,21 @@ echo ""
 echo "=== Step 3: Join tailnet ==="
 # --accept-routes: see other nodes' subnet routes (e.g. routes advertised by omv-main)
 # --ssh:           enable Tailscale SSH so phone can SSH in without key
-# This will print an auth URL — open it on any browser to approve the node
-sudo tailscale up \
-  --accept-routes \
-  --ssh \
-  --hostname=omv-ha
+# If TS_AUTH_KEY is set (CI/automated run), use it. Otherwise falls back to
+# interactive browser auth — an auth URL is printed.
+if [[ -n "${TS_AUTH_KEY:-}" ]]; then
+  sudo tailscale up \
+    --accept-routes \
+    --ssh \
+    --hostname=omv-ha \
+    --auth-key="${TS_AUTH_KEY}"
+else
+  # Interactive: prints a URL — open it in any browser to approve the node
+  sudo tailscale up \
+    --accept-routes \
+    --ssh \
+    --hostname=omv-ha
+fi
 
 echo ""
 echo "=== Step 4: Status ==="
