@@ -43,19 +43,22 @@ kubectl get pods -A -o wide --field-selector spec.nodeName=omv-ha \
   --no-headers | awk '{print $1, $2, $4}' | column -t | sort
 ```
 
-**Expected on omv-ha** (only system + DaemonSets):
+**Expected on omv-ha** (DaemonSets + two pinned workloads):
 - `kube-system`: flannel/wireguard DaemonSet pod, kube-proxy (if applicable), metrics-server
 - `monitoring`: node-exporter DaemonSet pod
-- Nothing else — user workloads here means the taint is missing or pods have incorrect tolerations
+- `cloudless`: `cloudflared-ha` Deployment (second Cloudflare tunnel connector, nodeSelector=omv-ha)
+- `kube-system`: `journal-vacuum-omv-ha` CronJob (nodeSelector=omv-ha)
+- Any other user pod here is unexpected — check nodeSelector on that deployment
 
-**Expected on omv** (all user workloads):
+**Expected on omv** (all other user workloads):
 - `analytics`: metabase, duckdb-api, ML jobs, s3-sync
 - `monitoring`: prometheus, grafana, alertmanager, kube-state-metrics
 - `n8n`: n8n
 - `ntfy`: ntfy
 - `oncall`: oncall-engine, oncall-celery, oncall-mariadb, oncall-redis
-- `cloudless`: cloudless-manager, cloudless-app, oauth2-proxy, cloudflared, cloudflared-ha
+- `cloudless`: cloudless-manager, cloudless-app, oauth2-proxy
 - `home-assistant`: home-assistant
+- Note: `cloudflared` (primary connector) runs as a **systemd service on omv-main**, not a pod
 
 ## 5. Memory pressure check (omv-ha 1 GB limit)
 
