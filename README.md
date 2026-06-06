@@ -66,7 +66,7 @@ Set with `gh secret set NAME` (secrets) or `gh variable set NAME --body VALUE` (
 |------|------|---------|---------------|
 | `PI_SSH_KEY` | Secret | `restart-pi-runners.yml` | Private key with SSH access to omv-2/omv-3 |
 | `RUNNER_REGISTRATION_PAT` | Secret | `restart-pi-runners.yml` | GitHub PAT → repo scope |
-| `CF_LB_API_TOKEN` | Secret | `provision-cloudflare-lb.yml` | Cloudflare dashboard → API Tokens → scopes: `Load Balancers:Edit`, `Load Balancing Monitors and Pools:Edit` |
+| `CLOUDFLARE_API_TOKEN` | Secret | `provision-cloudflare-lb.yml`, DNS workflows | Token B `gh-actions-dns-lb`: scopes `Zone:DNS:Edit`, `Zone:Zone:Read`, `Zone:Load Balancing:Edit` — scope to cloudless.gr only |
 | `TS_OAUTH_CLIENT_ID` | Secret | `tailscale-connect.yml` | Tailscale admin → Settings → OAuth Clients → scope: `auth_keys` |
 | `TS_OAUTH_SECRET` | Secret | `tailscale-connect.yml` | Same OAuth client creation as above |
 | `CLOUDFLARE_ACCOUNT_ID` | Variable | `provision-cloudflare-lb.yml` | `fb7dc7b69b662480cd5961a4d1913c78` |
