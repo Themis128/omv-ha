@@ -67,7 +67,7 @@ Key invariants to maintain (post-demotion state):
 | Workflow | File | Purpose |
 |----------|------|---------|
 | Keycloak removal | `.github/workflows/apply-keycloak-removal.yml` | Two-job: `cognito-setup` (AWS OIDC only, no Tailscale) + `cluster-apply` (needs `TS_OAUTH_*` secrets). Run with `apply_cluster=false` first if Tailscale isn't set up yet. |
-| Cloudflare LB | `.github/workflows/provision-cloudflare-lb.yml` | Create active-passive LB via API — needs `CF_LB_API_TOKEN` secret |
+| Cloudflare LB | `.github/workflows/provision-cloudflare-lb.yml` | Create active-passive LB via API — needs `CLOUDFLARE_API_TOKEN` secret (token B with LB:Edit scope) |
 | Tailscale OAuth | `.github/workflows/tailscale-connect.yml` | Reusable workflow for Tailscale in CI — needs `TS_OAUTH_CLIENT_ID` + `TS_OAUTH_SECRET` secrets |
 | AWS key rotation | `.github/workflows/rotate-aws-key.yml` | Rotate IAM keys via OIDC — needs `grant-iam-all.sh` run first |
 | Pi runner restart | `.github/workflows/restart-pi-runners.yml` | Restart/re-register self-hosted runners on omv-2/omv-3 |
