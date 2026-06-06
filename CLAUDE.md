@@ -225,6 +225,25 @@ Do not lower these values. `took too long` warnings <200 ms are expected and har
 
 ---
 
+## DNS state — cloudless.gr (baseline 2026-06-06T13:05:35Z)
+
+SHA: `b180250723fbb9bdbee1f7aba945dd7e4d9724afe22fc6d7cbfa84ee365837fc`
+
+| Record | Value | Notes |
+|---|---|---|
+| `cloudless.gr` A | `104.21.67.68`, `172.67.216.36` | Cloudflare CDN (proxied) |
+| `cloudless.gr` MX | `inbound-smtp.us-east-1.amazonaws.com` | SES receive active |
+| `cloudless.gr` NS | `fay.ns.cloudflare.com`, `jihoon.ns.cloudflare.com` | CF-managed |
+| `cloudless.gr` SPF | `v=spf1 include:amazonses.com ~all` | SES send authorized |
+| `cloudless.gr` DMARC | `p=none; rua=mailto:dmarc@cloudless.gr` | Monitoring only |
+| `cloudless.gr` DKIM | **empty / NXDOMAIN** | ⚠️ missing — check SES DKIM verification |
+| `cloudless.online` | **NXDOMAIN (all records)** | Domain gone since 2026-06-04 |
+
+**DKIM gap:** Run `aws ses get-identity-dkim-attributes --identities cloudless.gr` to verify.
+If DKIM tokens exist in SES but the `_domainkey` CNAME is missing from Cloudflare DNS, add them.
+
+---
+
 ## AWS Cognito — cloudless.gr user auth
 
 ### Pool topology
