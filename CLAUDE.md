@@ -110,18 +110,18 @@ Note: Cloudflare does NOT support GitHub OIDC federation — long-lived tokens r
 
 | Step | Action | Where | Status |
 |---|---|---|---|
-| 1 | Trigger `cloudflare-token-revoke.yml` (confirm=`revoke`) — revokes exposed GH Actions token | github.com/Themis128/omv-ha/actions | ⬜ |
+| 1 | `CLOUDFLARE_API_TOKEN` was already empty/dead — confirmed by 3 failed workflow runs on 2026-06-06 (`Bearer ` blank in logs). No revocation needed. | — | ✅ |
 | 2 | Create **token A** `cert-manager-dns01`: Zone:DNS:Edit + Zone:Zone:Read, scope=cloudless.gr | dash.cloudflare.com → My Profile → API Tokens | ⬜ |
 | 3 | Create **token B** `gh-actions-dns-lb`: Zone:DNS:Edit + Zone:Zone:Read + Zone:LB:Edit, scope=cloudless.gr | dash.cloudflare.com → My Profile → API Tokens | ⬜ |
-| 4 | Update GitHub Secret `CLOUDFLARE_API_TOKEN` with token B | github.com/Themis128/omv-ha/settings/secrets | ⬜ |
-| 5 | Find cloudless.gr zone ID → set repo variable `CLOUDFLARE_ZONE_ID` | dash.cloudflare.com → cloudless.gr → Overview sidebar | ⬜ |
-| 6 | Update Cognito app client callbacks (see snippet above) | AWS CloudShell | ⬜ |
-| 7 | Rotate ses-smtp-prod IAM key — `rotate-aws-key.yml` (dry_run=true then false) | github.com/Themis128/omv-ha/actions | ⬜ |
-| 8 | Retrieve new IAM key from SSM → update `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | AWS CloudShell | ⬜ |
-| 9 | Add `CLOUDLESS_PAT` + `ANTHROPIC_API_KEY` secrets, then trigger `cloudless-keycloak-cleanup.yml` | github.com/Themis128/omv-ha/settings/secrets | ⬜ |
-| 10 | Create Tailscale OAuth client → add `TS_OAUTH_CLIENT_ID` + `TS_OAUTH_SECRET` | admin.tailscale.com → Settings → OAuth | ⬜ |
+| 4 | Run `bash k8s/ha/scripts/bootstrap-rotation.sh --token-a A --token-b B [--cloudless-pat ..] [--anthropic-key ..] [--aws-rotate] [--cognito]` — sets CLOUDFLARE_API_TOKEN, auto-fetches + sets CLOUDFLARE_ZONE_ID, optionally sets other secrets, triggers IAM rotation, updates Cognito callbacks | local machine with `gh` CLI authenticated | ⬜ |
+| 5 | ~~Find cloudless.gr zone ID → set repo variable~~ — handled automatically by `bootstrap-rotation.sh` via CF API | — | ✅ (script) |
+| 6 | Cognito callback update — pass `--cognito` to `bootstrap-rotation.sh` (requires `aws` CLI) | AWS CloudShell or local with `AWS_PROFILE=admin` | ⬜ |
+| 7 | Rotate ses-smtp-prod IAM key — pass `--aws-rotate` to `bootstrap-rotation.sh` (triggers `rotate-aws-key.yml` dry_run=true) | local machine with `gh` CLI | ⬜ |
+| 8 | After dry run passes, re-run `rotate-aws-key.yml` with `dry_run=false` → retrieve from SSM → update `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | AWS CloudShell | ⬜ |
+| 9 | Add `CLOUDLESS_PAT` + `ANTHROPIC_API_KEY` — pass `--cloudless-pat` + `--anthropic-key` to `bootstrap-rotation.sh` | local machine with `gh` CLI | ⬜ |
+| 10 | Create Tailscale OAuth client → run `bash k8s/ha/scripts/set-github-secrets.sh --ts-client-id ... --ts-client-secret ...` | admin.tailscale.com → Settings → OAuth | ⬜ |
 | 11 | cluster-apply Pass 2 (`apply_cluster=true`) | github.com/Themis128/omv-ha/actions | ⬜ |
-| 12 | Restore cloudless.gr DNS records after drift event | dash.cloudflare.com → cloudless.gr → DNS | ⬜ |
+| 12 | Restore cloudless.gr DNS records — run `/cloudflare-status` then `cloudflare_bulk_restore_dns` | cloudless-infra MCP (once token set) | ⬜ |
 | 13 | Merge PR #16 | github.com/Themis128/omv-ha/pull/16 | ⬜ |
 
 After step 7 runs (dry_run=false), retrieve from SSM and update secrets via CloudShell:
