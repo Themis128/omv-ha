@@ -100,13 +100,40 @@ else
   echo "   (skipped — no kubectl)"
 fi
 
+# ── Auto-fetch CLOUDFLARE_ZONE_ID ────────────────────────────────────────────
+echo ""
+echo "5. Auto-fetching cloudless.gr zone ID via token B..."
+ZONE_RESP=$(curl -sf "https://api.cloudflare.com/client/v4/zones?name=cloudless.gr&status=active" \
+  -H "Authorization: Bearer ${TOKEN_B}" 2>/dev/null || echo '{"success":false}')
+if [[ "$(echo "$ZONE_RESP" | jq -r '.success')" == "true" ]]; then
+  ZONE_ID=$(echo "$ZONE_RESP" | jq -r '.result[0].id')
+  if [[ -n "$ZONE_ID" && "$ZONE_ID" != "null" ]]; then
+    gh variable set CLOUDFLARE_ZONE_ID --repo "${REPO}" --body "${ZONE_ID}"
+    echo "   ✅ CLOUDFLARE_ZONE_ID set to ${ZONE_ID}"
+  else
+    echo "   ❌ Zone not found for cloudless.gr"
+    ZONE_ID="(not set)"
+  fi
+else
+  echo "   ❌ Zone ID lookup failed — set CLOUDFLARE_ZONE_ID manually:"
+  echo "      github.com/Themis128/omv-ha/settings/variables"
+  echo "      Value: dash.cloudflare.com → cloudless.gr → Overview (right sidebar)"
+  ZONE_ID="(not set)"
+fi
+
 echo ""
 echo "========================================================"
 echo "  Done. Summary:"
 echo "  ✅ CLOUDFLARE_API_TOKEN → token B (gh-actions-dns-lb)"
+echo "  ✅ CLOUDFLARE_ZONE_ID  → ${ZONE_ID:-not set}"
 echo "  $(command -v kubectl &>/dev/null && echo '✅' || echo '⏸') cloudflare-api-token k8s secret → token A (cert-manager-dns01)"
 echo "========================================================"
 echo ""
-echo "Next: set CLOUDFLARE_ZONE_ID repo variable at"
-echo "  github.com/Themis128/omv-ha/settings/variables"
-echo "  Value: find at dash.cloudflare.com → cloudless.gr → Overview (right sidebar)"
+echo "Next steps:"
+echo "  1. Rotate ses-smtp-prod IAM key:"
+echo "     gh workflow run rotate-aws-key.yml --repo ${REPO} \\"
+echo "       -f iam_username=ses-smtp-prod \\"
+echo "       -f old_key_id=AKIAUBXIAELU5SADA3XL \\"
+echo "       -f dry_run=true"
+echo "  2. After dry_run passes, re-run with dry_run=false"
+echo "  3. Retrieve new key from SSM (see rotate-aws-key.yml step summary)"
