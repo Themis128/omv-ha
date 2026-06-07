@@ -1,5 +1,8 @@
 import { z } from "zod";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { getLambdaLogs, listLambdaLogGroups, getHealthCheckStatus, listSsmParameters, getSsmParameter, } from "../services/aws.js";
+const execFileAsync = promisify(execFile);
 import { LAMBDA_LOG_GROUP_PREFIX, PRIMARY_HEALTH_CHECK_ID, SECONDARY_HEALTH_CHECK_ID, SSM_PREFIX, CHARACTER_LIMIT, } from "../constants.js";
 export function registerAwsTools(server) {
     // ── aws_get_lambda_logs ───────────────────────────────────────────────────
@@ -305,6 +308,179 @@ Note: Route 53 SECONDARY records (API Gateway path) retired 2026-05-23.
 - omv-ha (Pi 3B, 1 GB): 192.168.1.130 — k3s agent only (demoted 2026-05-24), cloudflared-ha
 `;
         return { content: [{ type: "text", text }] };
+    });
+    // ── aws_cognito_update_callbacks ──────────────────────────────────────────
+    server.registerTool("aws_cognito_update_callbacks", {
+        title: "AWS Cognito — Update App Client Callbacks",
+        description: `Update callback and logout URLs on the cloudless-oauth2-proxy Cognito app client.
+Reads COGNITO_USER_POOL_ID from SSM (/cloudless/production/COGNITO_USER_POOL_ID) automatically.
+
+Default target: manage.cloudless.gr (fixes stale manage.cloudless.online callbacks from Pass 1).
+Client ID: 63d3fu5lp057694h0t70je4jk0 (cloudless-oauth2-proxy, created 2026-06-04)
+
+Requires AWS credentials with cognito-idp:UpdateUserPoolClient permission.`,
+        inputSchema: z.object({
+            client_id: z
+                .string()
+                .default("63d3fu5lp057694h0t70je4jk0")
+                .describe("Cognito app client ID"),
+            callback_url: z
+                .string()
+                .default("https://manage.cloudless.gr/oauth2/callback")
+                .describe("OAuth2 callback URL"),
+            logout_url: z
+                .string()
+                .default("https://manage.cloudless.gr")
+                .describe("Post-logout redirect URL"),
+            region: z.string().default("us-east-1"),
+            dry_run: z.boolean().default(false),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false },
+    }, async ({ client_id, callback_url, logout_url, region, dry_run }) => {
+        try {
+            // Read pool ID from SSM
+            const { stdout: poolIdRaw } = await execFileAsync("aws", [
+                "ssm", "get-parameter",
+                "--name", "/cloudless/production/COGNITO_USER_POOL_ID",
+                "--query", "Parameter.Value",
+                "--output", "text",
+                "--region", region,
+            ], { timeout: 15_000 });
+            const poolId = poolIdRaw.trim();
+            if (!poolId) {
+                return { content: [{ type: "text", text: `❌ COGNITO_USER_POOL_ID not found in SSM` }] };
+            }
+            if (dry_run) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: [
+                                `DRY RUN — would update:`,
+                                `  Pool ID:      ${poolId}`,
+                                `  Client ID:    ${client_id}`,
+                                `  Callback URL: ${callback_url}`,
+                                `  Logout URL:   ${logout_url}`,
+                            ].join("\n"),
+                        }],
+                };
+            }
+            await execFileAsync("aws", [
+                "cognito-idp", "update-user-pool-client",
+                "--user-pool-id", poolId,
+                "--client-id", client_id,
+                "--callback-urls", callback_url,
+                "--logout-urls", logout_url,
+                "--region", region,
+            ], { timeout: 30_000 });
+            return {
+                content: [{
+                        type: "text",
+                        text: [
+                            `✅ Cognito app client updated`,
+                            `  Pool ID:      ${poolId}`,
+                            `  Client ID:    ${client_id}`,
+                            `  Callback URL: ${callback_url}`,
+                            `  Logout URL:   ${logout_url}`,
+                        ].join("\n"),
+                    }],
+            };
+        }
+        catch (e) {
+            const msg = e.message ?? String(e);
+            return { content: [{ type: "text", text: `❌ ${msg}` }] };
+        }
+    });
+    // ── aws_iam_rotate_key ────────────────────────────────────────────────────
+    server.registerTool("aws_iam_rotate_key", {
+        title: "AWS IAM — Rotate Access Key",
+        description: `Rotate an IAM user's access key: deactivate the old key, create a new one,
+store in SSM Parameter Store, and update GitHub secrets AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY.
+
+This replaces the rotate-aws-key.yml workflow for interactive use.
+Default target: ses-smtp-prod (old key AKIAUBXIAELU5SADA3XL).
+
+Requires: aws CLI authenticated + gh CLI authenticated.`,
+        inputSchema: z.object({
+            iam_username: z.string().default("ses-smtp-prod"),
+            old_key_id: z.string().default("AKIAUBXIAELU5SADA3XL"),
+            dry_run: z.boolean().default(true).describe("Print actions without executing (default: true for safety)"),
+            delete_old: z.boolean().default(false).describe("Permanently delete old key (use after 14-day wait)"),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false },
+    }, async ({ iam_username, old_key_id, dry_run, delete_old }) => {
+        const SSM_PREFIX = `/github-actions/aws-key/${iam_username}`;
+        try {
+            if (dry_run) {
+                return {
+                    content: [{
+                            type: "text",
+                            text: [
+                                `DRY RUN — would:`,
+                                `  1. Deactivate key ${old_key_id} for user ${iam_username}`,
+                                `  2. Create new access key`,
+                                `  3. Store in SSM: ${SSM_PREFIX}/`,
+                                `  4. Update GitHub secrets AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY`,
+                                delete_old ? `  5. Delete old key ${old_key_id}` : `  5. Keep old key (Inactive) for 14 days`,
+                                ``,
+                                `Re-run with dry_run=false to execute.`,
+                            ].join("\n"),
+                        }],
+                };
+            }
+            // Deactivate old key
+            await execFileAsync("aws", [
+                "iam", "update-access-key",
+                "--user-name", iam_username,
+                "--access-key-id", old_key_id,
+                "--status", "Inactive",
+            ], { timeout: 15_000 });
+            // Create new key
+            const { stdout: createOut } = await execFileAsync("aws", [
+                "iam", "create-access-key",
+                "--user-name", iam_username,
+                "--output", "json",
+            ], { timeout: 15_000 });
+            const created = JSON.parse(createOut);
+            const newKeyId = created.AccessKey.AccessKeyId;
+            const newSecret = created.AccessKey.SecretAccessKey;
+            // Store in SSM
+            await execFileAsync("aws", [
+                "ssm", "put-parameter",
+                "--name", `${SSM_PREFIX}/access-key-id`,
+                "--value", newKeyId, "--type", "String", "--overwrite",
+            ], { timeout: 15_000 });
+            await execFileAsync("aws", [
+                "ssm", "put-parameter",
+                "--name", `${SSM_PREFIX}/secret-access-key`,
+                "--value", newSecret, "--type", "SecureString", "--overwrite",
+            ], { timeout: 15_000 });
+            // Update GitHub secrets
+            await execFileAsync("gh", ["secret", "set", "AWS_ACCESS_KEY_ID", "--repo", "Themis128/omv-ha", "--body", newKeyId], { timeout: 15_000 });
+            await execFileAsync("gh", ["secret", "set", "AWS_SECRET_ACCESS_KEY", "--repo", "Themis128/omv-ha", "--body", newSecret], { timeout: 15_000 });
+            // Optionally delete old key
+            if (delete_old) {
+                await execFileAsync("aws", [
+                    "iam", "delete-access-key",
+                    "--user-name", iam_username,
+                    "--access-key-id", old_key_id,
+                ], { timeout: 15_000 });
+            }
+            return {
+                content: [{
+                        type: "text",
+                        text: [
+                            `✅ IAM key rotated for ${iam_username}`,
+                            `  Old key: ${old_key_id} → Inactive${delete_old ? " (deleted)" : " (kept — delete after 14 days)"}`,
+                            `  New key: ${newKeyId}`,
+                            `  SSM: ${SSM_PREFIX}/`,
+                            `  GitHub: AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY updated`,
+                        ].join("\n"),
+                    }],
+            };
+        }
+        catch (e) {
+            return { content: [{ type: "text", text: `❌ ${e.message}` }] };
+        }
     });
 }
 //# sourceMappingURL=aws.js.map

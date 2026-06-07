@@ -1351,6 +1351,184 @@ Default setup for cloudless.gr:
     },
   );
 
+  // ── cloudflare_bootstrap_two_tokens ──────────────────────────────────────
+  server.registerTool(
+    "cloudflare_bootstrap_two_tokens",
+    {
+      title: "Cloudflare — Bootstrap Two-Token Architecture",
+      description: `Create both required Cloudflare API tokens from scratch using a Global API Key,
+then set CLOUDFLARE_API_TOKEN (GitHub secret) and CLOUDFLARE_ZONE_ID (GitHub variable)
+automatically. This is the single-command alternative to the browser workflow.
+
+Tokens created:
+  Token A  cert-manager-dns01  Zone:DNS:Edit + Zone:Zone:Read  →  cloudless.gr only
+  Token B  gh-actions-dns-lb   Zone:DNS:Edit + Zone:Zone:Read + Zone:LB:Edit  → cloudless.gr only
+
+Token A is returned for manual kubectl apply (cert-manager secret).
+Token B is set as CLOUDFLARE_API_TOKEN GitHub secret automatically.
+CLOUDFLARE_ZONE_ID GitHub variable is set automatically.
+
+Requires:
+  - global_api_key: Cloudflare Global API Key (dash.cloudflare.com → My Profile → API Tokens → Global API Key)
+  - email: Cloudflare account email
+  - gh CLI authenticated locally (to set GitHub secret + variable)`,
+      inputSchema: z.object({
+        email: z.string().describe("Cloudflare account email"),
+        global_api_key: z.string().describe("Cloudflare Global API Key"),
+        dry_run: z.boolean().default(false).describe("Preview what would be created without creating"),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ email, global_api_key, dry_run }) => {
+      const CF_API_BASE = "https://api.cloudflare.com/client/v4";
+      const { execFile } = await import("child_process");
+      const { promisify } = await import("util");
+      const execFileAsync = promisify(execFile);
+
+      const globalFetch = async (path: string, options: RequestInit = {}) => {
+        const res = await fetch(`${CF_API_BASE}${path}`, {
+          ...options,
+          headers: {
+            "X-Auth-Email": email,
+            "X-Auth-Key": global_api_key,
+            "Content-Type": "application/json",
+            ...(options.headers ?? {}),
+          },
+        });
+        return res.json() as Promise<CfResult<unknown>>;
+      };
+
+      try {
+        // 1. Get zone ID for cloudless.gr
+        const zoneData = (await globalFetch("/zones?name=cloudless.gr&status=active")) as CfResult<Array<{ id: string; name: string }>>;
+        if (!zoneData.success || !zoneData.result.length) {
+          return { content: [{ type: "text", text: `❌ Cannot find cloudless.gr zone: ${cfError(zoneData)}` }] };
+        }
+        const zoneId = zoneData.result[0].id;
+
+        // 2. Look up permission group IDs
+        const pgData = (await globalFetch("/user/tokens/permission_groups")) as CfResult<Array<{ id: string; name: string; scopes: string[] }>>;
+        if (!pgData.success) {
+          return { content: [{ type: "text", text: `❌ Cannot fetch permission groups: ${cfError(pgData)}` }] };
+        }
+        const pg = pgData.result;
+        const findPg = (name: string) => pg.find((g) => g.name === name);
+        const dnsEdit  = findPg("Zone DNS");
+        const zoneRead = findPg("Zone Read");
+        const lbEdit   = findPg("Load Balancing: Edit") ?? findPg("Zone Load Balancing");
+
+        const missing = [
+          !dnsEdit  && "Zone DNS",
+          !zoneRead && "Zone Read",
+          !lbEdit   && "Load Balancing",
+        ].filter(Boolean);
+        if (missing.length) {
+          const all = pg.map((g) => `  ${g.id}  ${g.name}`).join("\n");
+          return { content: [{ type: "text", text: `❌ Cannot find permission group(s): ${missing.join(", ")}\n\nAvailable:\n${all}` }] };
+        }
+
+        const zoneResource = `com.cloudflare.api.account.zone.${zoneId}`;
+
+        if (dry_run) {
+          return {
+            content: [{
+              type: "text",
+              text: [
+                `DRY RUN — would create:`,
+                `  Zone ID:  ${zoneId}`,
+                `  Token A   cert-manager-dns01  [${dnsEdit!.id}, ${zoneRead!.id}]  → zone ${zoneId}`,
+                `  Token B   gh-actions-dns-lb   [${dnsEdit!.id}, ${zoneRead!.id}, ${lbEdit!.id}]  → zone ${zoneId}`,
+                `  GitHub:   CLOUDFLARE_API_TOKEN ← token B value`,
+                `  GitHub:   CLOUDFLARE_ZONE_ID = ${zoneId}`,
+              ].join("\n"),
+            }],
+          };
+        }
+
+        // 3. Create Token A (cert-manager-dns01)
+        const tokenAData = (await globalFetch("/user/tokens", {
+          method: "POST",
+          body: JSON.stringify({
+            name: "cert-manager-dns01",
+            policies: [{
+              effect: "allow",
+              resources: { [zoneResource]: "*" },
+              permission_groups: [{ id: dnsEdit!.id }, { id: zoneRead!.id }],
+            }],
+          }),
+        })) as CfResult<{ id: string; name: string; value?: string }>;
+        if (!tokenAData.success) {
+          return { content: [{ type: "text", text: `❌ Token A creation failed: ${cfError(tokenAData)}` }] };
+        }
+        const tokenAValue = tokenAData.result.value ?? "(no value returned — re-run or check CF dashboard)";
+
+        // 4. Create Token B (gh-actions-dns-lb)
+        const tokenBData = (await globalFetch("/user/tokens", {
+          method: "POST",
+          body: JSON.stringify({
+            name: "gh-actions-dns-lb",
+            policies: [{
+              effect: "allow",
+              resources: { [zoneResource]: "*" },
+              permission_groups: [{ id: dnsEdit!.id }, { id: zoneRead!.id }, { id: lbEdit!.id }],
+            }],
+          }),
+        })) as CfResult<{ id: string; name: string; value?: string }>;
+        if (!tokenBData.success) {
+          return { content: [{ type: "text", text: `❌ Token B creation failed: ${cfError(tokenBData)}\n\nToken A was created (ID: ${tokenAData.result.id}) — check CF dashboard.` }] };
+        }
+        const tokenBValue = tokenBData.result.value ?? "";
+
+        // 5. Set GitHub secret CLOUDFLARE_API_TOKEN = token B
+        let ghSecretResult = "";
+        if (tokenBValue) {
+          try {
+            await execFileAsync("gh", ["secret", "set", "CLOUDFLARE_API_TOKEN", "--repo", "Themis128/omv-ha", "--body", tokenBValue], { timeout: 15_000 });
+            ghSecretResult = "✅ CLOUDFLARE_API_TOKEN set on Themis128/omv-ha";
+          } catch (e) {
+            ghSecretResult = `⚠️  GitHub secret set failed: ${(e as Error).message}\nSet manually: gh secret set CLOUDFLARE_API_TOKEN --repo Themis128/omv-ha --body "${tokenBValue}"`;
+          }
+        }
+
+        // 6. Set GitHub variable CLOUDFLARE_ZONE_ID
+        let ghVarResult = "";
+        try {
+          await execFileAsync("gh", ["variable", "set", "CLOUDFLARE_ZONE_ID", "--repo", "Themis128/omv-ha", "--body", zoneId], { timeout: 15_000 });
+          ghVarResult = `✅ CLOUDFLARE_ZONE_ID = ${zoneId} set on Themis128/omv-ha`;
+        } catch (e) {
+          ghVarResult = `⚠️  GitHub variable set failed: ${(e as Error).message}\nSet manually: gh variable set CLOUDFLARE_ZONE_ID --repo Themis128/omv-ha --body "${zoneId}"`;
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: [
+              `## ✅ Cloudflare two-token bootstrap complete`,
+              ``,
+              `Zone ID:  ${zoneId}`,
+              ``,
+              `Token A  cert-manager-dns01  (ID: ${tokenAData.result.id})`,
+              `⚠️  Save Token A value now (shown only once):`,
+              `   ${tokenAValue}`,
+              ``,
+              `Apply to cert-manager namespace:`,
+              `   kubectl create secret generic cloudflare-api-token \\`,
+              `     --namespace cert-manager \\`,
+              `     --from-literal=api-token="${tokenAValue}" \\`,
+              `     --dry-run=client -o yaml | kubectl apply -f -`,
+              ``,
+              `Token B  gh-actions-dns-lb   (ID: ${tokenBData.result.id})`,
+              ghSecretResult,
+              ghVarResult,
+            ].join("\n"),
+          }],
+        };
+      } catch (e) {
+        return { content: [{ type: "text", text: `❌ ${(e as Error).message}` }] };
+      }
+    },
+  );
+
   // ── cloudflare_worker_routes ──────────────────────────────────────────────
   server.registerTool(
     "cloudflare_worker_routes",
