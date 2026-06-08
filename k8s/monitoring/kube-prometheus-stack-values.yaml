@@ -49,7 +49,7 @@ kubeEtcd:
 kubeProxy:
   enabled: false
 
-# AlertManager — runs on omv (Pi 5); NFS PVC for cross-node mobility
+# AlertManager — runs on omv-ha (Pi 4); NFS PVC for cross-node mobility
 alertmanager:
   enabled: true
   config:
@@ -100,7 +100,7 @@ alertmanager:
           group_wait: 30s
           group_interval: 3m
           repeat_interval: 2h
-        # alert-api: warnings + criticals → MQTT LED display + Slack (continue fan-out to oncall)
+        # Alert API — all alerts forwarded for ESP32 display + remediation DB
         - receiver: "alert-api"
           matchers: [severity =~ "warning|critical"]
           continue: true
@@ -119,21 +119,23 @@ alertmanager:
               basic_auth:
                 username: alertmanager
                 password: "am-ntfy-2026!"
+      # After creating integration in OnCall (Integrations → + New → Alertmanager Prometheus),
+      # replace REPLACE_WITH_INTEGRATION_TOKEN with the token from the generated URL.
       - name: "oncall-webhook"
         webhook_configs:
           - url: "http://oncall-engine.oncall.svc.cluster.local:8080/integrations/v1/alertmanager/aed2bf7d35817a5e8f27306c35d3/"
             send_resolved: true
             max_alerts: 50
-      # alert-api: drives MQTT LED display + Slack notifications
+      # Alert API — ESP32 LED display + remediation tracking
       - name: "alert-api"
         webhook_configs:
           - url: "http://alert-api.alert-manager.svc.cluster.local:8080/api/alertmanager/webhook"
             send_resolved: true
-            max_alerts: 20
+            max_alerts: 50
   alertmanagerSpec:
     replicas: 1
     nodeSelector:
-      kubernetes.io/hostname: omv
+      kubernetes.io/hostname: omv-ha
     retention: 24h
     logLevel: warn
     resources:
@@ -161,6 +163,12 @@ alertmanager:
           - url: "http://oncall-engine.oncall.svc.cluster.local:8080/integrations/v1/alertmanager/aed2bf7d35817a5e8f27306c35d3/"
             send_resolved: true
             max_alerts: 50
+      # Alert API — ESP32 LED display + remediation tracking
+      - name: alert-api
+        webhook_configs:
+          - url: "http://alert-api.alert-manager.svc.cluster.local:8080/api/alertmanager/webhook"
+            send_resolved: true
+            max_alerts: 50
     route:
       group_by: [namespace]
       group_wait: 30s
@@ -174,6 +182,14 @@ alertmanager:
         - matchers:
             - severity = "info"
           receiver: "null"
+        # Alert API — all warning/critical alerts forwarded for ESP32 display + remediation DB
+        - matchers:
+            - severity =~ "warning|critical"
+          receiver: alert-api
+          continue: true
+          group_wait: 10s
+          group_interval: 2m
+          repeat_interval: 4h
     inhibit_rules:
       - equal: [namespace, alertname]
         source_matchers: [severity = critical]
@@ -189,15 +205,7 @@ alertmanager:
 # Grafana — comprehensive admin dashboard at NodePort 10000
 grafana:
   enabled: true
-  # Password stored in k8s secret — do not add adminPassword here.
-  # Create the secret first:
-  #   kubectl create secret generic grafana-admin-credentials -n monitoring \
-  #     --from-literal=admin-user=admin \
-  #     --from-literal=admin-password=<password>
-  admin:
-    existingSecret: grafana-admin-credentials
-    userKey: admin-user
-    passwordKey: admin-password
+  adminPassword: "Cloudless@Admin2026!"
 
   service:
     type: NodePort
@@ -229,6 +237,27 @@ grafana:
     GOGC: "50"
 
   envFromSecret: "aws-creds"
+
+  # Probe tuning — grafana 13.0.1 dashboards.grafana.app apiserver can
+  # block /api/health for a few seconds during inactive-secure-value cleanup.
+  # Default readiness timeoutSeconds:1 trips during those windows; bump both.
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 5
+    successThreshold: 1
+  livenessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 30
+    failureThreshold: 10
+    successThreshold: 1
 
   sidecar:
     resources:
