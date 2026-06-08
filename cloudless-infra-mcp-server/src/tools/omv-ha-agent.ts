@@ -24,7 +24,7 @@ export function registerOmvHaAgentTools(server: McpServer): void {
     "omv_ha_agent_status",
     {
       title: "omv-ha k3s Agent Status",
-      description: `Check the k3s-agent service on omv-ha (Pi 4, 192.168.1.130).
+      description: `Check the k3s-agent service on omv-ha (Pi 3B, 192.168.1.130).
 omv-ha was demoted from control-plane+etcd to agent-only on 2026-05-24 to fix 2-node etcd instability.
 Returns: k3s-agent service state, keepalived state, recent agent logs, memory, load average, and swap.
 Also verifies omv-ha appears in kubectl nodes with role <none> (not control-plane,etcd).`,
@@ -80,7 +80,7 @@ Also verifies omv-ha appears in kubectl nodes with role <none> (not control-plan
     "omv_ha_agent_restart",
     {
       title: "Restart k3s-agent on omv-ha",
-      description: `Restart the k3s-agent systemd service on omv-ha (Pi 4, 192.168.1.130).
+      description: `Restart the k3s-agent systemd service on omv-ha (Pi 3B, 192.168.1.130).
 Use when omv-ha shows NotReady in kubectl nodes, or when k3s-agent is stuck/crashed.
 Waits 5 seconds and reports the new service state.
 This does NOT re-register the node — use omv_ha_agent_rejoin for a full reinstall.`,

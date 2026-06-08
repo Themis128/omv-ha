@@ -48,8 +48,8 @@ duckdb-api (analytics ns, omv)          Metabase (analytics ns, omv)
   image: duckdb-api-local:v2              image: metabase-debian:v0.55
   in-memory DuckDB                        H2 DB on metabase-data PVC
   reads Parquet from /data PVC            DuckDB JDBC → analytics.duckdb (read-only)
-  /execute ← ML pipeline writes scores    URL: https://metrics.cloudless.online
-  /query   ← n8n + cloudless.online
+  /execute ← ML pipeline writes scores    URL: https://metrics.cloudless.gr
+  /query   ← n8n + cloudless.gr
 
 ML CronJobs (analytics ns, omv)
   ml-feature-engineer (Sun 01:00 UTC)
@@ -323,4 +323,4 @@ Flag HEALTHY if: all pods Running/Ready, sync recent, DuckDB sync complete.
 - `metabase-*` READY=0/1 within first 4 min of startup → readiness probe has 240s delay
 - `web_analytics` table has only 30 rows → small synthetic/test dataset, not an error
 - duckdb-api `/tables` showing VIEW type for score tables → they are views over Parquet, correct
-- ML jobs producing synthetic data → expected until real cloudless.online events feed in
+- ML jobs producing synthetic data → expected until real cloudless.gr events feed in

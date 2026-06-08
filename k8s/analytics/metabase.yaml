@@ -3,7 +3,7 @@
 # ARM64 image: custom Debian (eclipse-temurin:21-jre-jammy) for glibc/DuckDB compat
 # Built on omv-main: /tmp/mb-build/Dockerfile → metabase-debian:v0.55
 # Runs on omv (Pi5 8GB)
-# URL: https://metrics.cloudless.online
+# URL: https://metrics.cloudless.gr
 ###############################################################################
 
 apiVersion: v1
@@ -68,7 +68,7 @@ spec:
             - name: JAVA_OPTS
               value: "-Xmx512m -Xms256m -DMB_PLUGINS_DIR=/plugins"
             - name: MB_SITE_URL
-              value: "https://metrics.cloudless.online"
+              value: "https://metrics.cloudless.gr"
             - name: MB_EMOJI_IN_LOGS
               value: "false"
             - name: MB_PLUGINS_DIR
@@ -140,7 +140,7 @@ spec:
     name: letsencrypt-cloudflare
     kind: ClusterIssuer
   dnsNames:
-    - metrics.cloudless.online
+    - metrics.cloudless.gr
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -154,10 +154,10 @@ metadata:
 spec:
   ingressClassName: traefik
   tls:
-    - hosts: [metrics.cloudless.online]
+    - hosts: [metrics.cloudless.gr]
       secretName: metrics-tls
   rules:
-    - host: metrics.cloudless.online
+    - host: metrics.cloudless.gr
       http:
         paths:
           - path: /

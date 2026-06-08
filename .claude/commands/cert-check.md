@@ -45,7 +45,7 @@ Use `mcp__cloudless-infra__cluster_run_command` on omv-main for each step:
 |---|---|---|---|
 | `postgres-tls` | `keycloak` | `cloudless-internal-ca` | Auto-renewed 30d before expiry |
 | `cloudless-internal-ca` | `keycloak` | (self-signed ClusterIssuer) | 10yr, manual rotation |
-| wildcard `*.cloudless.online` | `cert-manager` | letsencrypt (Cloudflare DNS-01) | 90d, auto-renewed |
+| wildcard `*.cloudless.gr` | `cert-manager` | letsencrypt (Cloudflare DNS-01) | 90d, auto-renewed |
 
 **Interpret results:**
 - `READY=True` + expiry >30d away → healthy

@@ -22,11 +22,11 @@ data:
     protocol: http2
 
     ingress:
-      - hostname: cloudless.online
+      - hostname: cloudless.gr
         service: https://192.168.1.200:18443
         originRequest:
           noTLSVerify: true
-      - hostname: "*.cloudless.online"
+      - hostname: "*.cloudless.gr"
         service: https://192.168.1.200:18443
         originRequest:
           noTLSVerify: true
@@ -52,10 +52,6 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: omv-ha
-      tolerations:
-        - key: "node-role.kubernetes.io/control-plane"
-          operator: "Exists"
-          effect: "NoSchedule"
       containers:
         - name: cloudflared
           image: cloudflare/cloudflared:2025.4.1

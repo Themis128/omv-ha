@@ -11,7 +11,7 @@ metadata:
   namespace: ntfy
 data:
   server.yml: |
-    base-url: https://ntfy.cloudless.online
+    base-url: https://ntfy.cloudless.gr
     listen-http: :80
     cache-file: /var/cache/ntfy/cache.db
     cache-duration: 12h
@@ -109,15 +109,15 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: ntfy-cloudless-online-tls
+  name: ntfy-gr-tls
   namespace: ntfy
 spec:
-  secretName: ntfy-cloudless-online-tls
+  secretName: ntfy-gr-tls
   issuerRef:
     name: letsencrypt-cloudflare
     kind: ClusterIssuer
   dnsNames:
-    - ntfy.cloudless.online
+    - ntfy.cloudless.gr
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -131,10 +131,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - ntfy.cloudless.online
-      secretName: ntfy-cloudless-online-tls
+        - ntfy.cloudless.gr
+      secretName: ntfy-gr-tls
   rules:
-    - host: ntfy.cloudless.online
+    - host: ntfy.cloudless.gr
       http:
         paths:
           - path: /

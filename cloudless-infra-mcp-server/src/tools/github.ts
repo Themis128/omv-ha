@@ -204,13 +204,70 @@ a systemd service. Idempotent — skips if already registered.`,
     },
   );
 
+  // ── gh_secret_set ───────────────────────────────────────────────────────
+  server.registerTool(
+    "gh_secret_set",
+    {
+      title: "GitHub — Set secret",
+      description: `Set a GitHub Actions secret for a repo via the gh CLI.
+Use to programmatically set CLOUDFLARE_API_TOKEN, AWS_ACCESS_KEY_ID, CLOUDLESS_PAT,
+ANTHROPIC_API_KEY, TS_OAUTH_CLIENT_ID, TS_OAUTH_SECRET, PI_SSH_KEY, etc.
+The secret value is never printed in output.`,
+      inputSchema: z.object({
+        repo: z.enum(["cloudless.gr", "cloudless-manager", "omv-ha"]).describe("Repo alias."),
+        name: z.string().describe("Secret name, e.g. CLOUDFLARE_API_TOKEN"),
+        value: z.string().describe("Secret value (never logged)"),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ repo, name, value }) => {
+      const fullRepo = resolveRepo(repo);
+      try {
+        await ghRaw(["secret", "set", name, "--repo", fullRepo, "--body", value]);
+        return { content: [{ type: "text", text: `✅ Secret **${name}** set on ${fullRepo}` }] };
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `❌ ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    },
+  );
+
+  // ── gh_variable_set ──────────────────────────────────────────────────────
+  server.registerTool(
+    "gh_variable_set",
+    {
+      title: "GitHub — Set variable",
+      description: `Set a GitHub Actions variable (non-secret, visible in logs) for a repo.
+Use for CLOUDFLARE_ZONE_ID and other non-sensitive configuration values.`,
+      inputSchema: z.object({
+        repo: z.enum(["cloudless.gr", "cloudless-manager", "omv-ha"]).describe("Repo alias."),
+        name: z.string().describe("Variable name, e.g. CLOUDFLARE_ZONE_ID"),
+        value: z.string().describe("Variable value"),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ repo, name, value }) => {
+      const fullRepo = resolveRepo(repo);
+      try {
+        await ghRaw(["variable", "set", name, "--repo", fullRepo, "--body", value]);
+        return { content: [{ type: "text", text: `✅ Variable **${name}** = \`${value}\` set on ${fullRepo}` }] };
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `❌ ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+    },
+  );
+
   // ── gh_workflow_trigger ─────────────────────────────────────────────────
   server.registerTool(
     "gh_workflow_trigger",
     {
       title: "GitHub Workflow — Trigger dispatch",
       description: `Trigger a workflow_dispatch on a GitHub repo and return the new run ID.
-Use to manually kick off a CI/CD pipeline (e.g., deploy-pi.yml, deploy.yml).`,
+Use to manually kick off a CI/CD pipeline (e.g., deploy-pi.yml, deploy.yml).
+Pass inputs as a key/value record for workflows that require -f parameters.`,
       inputSchema: z.object({
         repo: z
           .enum(["cloudless.gr", "cloudless-manager", "omv-ha"])
@@ -220,23 +277,25 @@ Use to manually kick off a CI/CD pipeline (e.g., deploy-pi.yml, deploy.yml).`,
           .describe('Workflow filename (e.g., "deploy-pi.yml", "deploy.yml").'),
         ref: z
           .string()
-          .default("main")
-          .describe("Git ref (branch/tag) to run on. Defaults to main."),
+          .default("master")
+          .describe("Git ref (branch/tag) to run on. Defaults to master."),
+        inputs: z
+          .record(z.string())
+          .optional()
+          .describe('Workflow inputs as key/value pairs, e.g. {"dry_run": "true", "iam_username": "ses-smtp-prod"}'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
-    async ({ repo, workflow, ref }) => {
+    async ({ repo, workflow, ref, inputs }) => {
       const fullRepo = resolveRepo(repo);
       try {
-        await ghRaw([
-          "workflow",
-          "run",
-          workflow,
-          "--repo",
-          fullRepo,
-          "--ref",
-          ref,
-        ]);
+        const args = ["workflow", "run", workflow, "--repo", fullRepo, "--ref", ref];
+        if (inputs) {
+          for (const [k, v] of Object.entries(inputs)) {
+            args.push("-f", `${k}=${v}`);
+          }
+        }
+        await ghRaw(args);
         // Wait briefly then fetch the new run ID
         await new Promise((r) => setTimeout(r, 3000));
         const raw = await ghRaw([

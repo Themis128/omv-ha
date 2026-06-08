@@ -1,0 +1,146 @@
+name: Configure & Test Tailscale on Pi nodes
+
+# Connects to the tailnet from CI, SSHes into omv-main directly (TS IP),
+# then hops through omv-main to reach omv-ha (ProxyJump — no subnet route
+# approval needed). Can run in test-only mode to check connectivity without
+# making any changes.
+#
+# Required secrets:
+#   TS_OAUTH_CLIENT_ID + TS_OAUTH_SECRET  — CI ephemeral Tailscale node
+#   PI_SSH_KEY                            — SSH private key for tbaltzakis@omv-main (and omv-ha)
+#   TS_AUTH_KEY                           — Tailscale pre-auth key for omv-ha (reusable, non-expiring)
+#                                           Create at: admin.tailscale.com → Settings → Keys
+#
+# omv-main Tailscale IP: 100.113.41.119
+# omv-ha LAN IP:         192.168.1.130  (reached via ProxyJump through omv-main)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which node(s) to configure"
+        type: choice
+        options:
+          - both
+          - main-only
+          - ha-only
+        default: both
+      test_only:
+        description: "Test connectivity only — no changes made"
+        type: boolean
+        default: false
+
+jobs:
+  configure:
+    name: ${{ inputs.test_only == 'true' && 'Test' || 'Configure' }} Tailscale (${{ inputs.target }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale (ephemeral CI node)
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          ephemeral: true
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PI_SSH_KEY }}" > ~/.ssh/pi_key
+          chmod 600 ~/.ssh/pi_key
+          cat >> ~/.ssh/config <<'EOF'
+          Host omv-main
+            HostName 100.113.41.119
+            User tbaltzakis
+            IdentityFile ~/.ssh/pi_key
+            StrictHostKeyChecking no
+            ConnectTimeout 20
+
+          Host omv-ha
+            HostName 192.168.1.130
+            User tbaltzakis
+            IdentityFile ~/.ssh/pi_key
+            ProxyJump omv-main
+            StrictHostKeyChecking no
+            ConnectTimeout 20
+          EOF
+
+      # ── omv-main ────────────────────────────────────────────────────────────
+
+      - name: Test — connect to omv-main
+        if: inputs.target != 'ha-only'
+        run: |
+          echo "=== omv-main connectivity ==="
+          ssh omv-main "echo OK; uname -a; tailscale status | head -8"
+
+      - name: Configure omv-main — subnet routing + Tailscale SSH
+        if: inputs.target != 'ha-only' && inputs.test_only == 'false'
+        run: |
+          echo "=== Applying setup-tailscale-main.sh on omv-main ==="
+          ssh omv-main "bash -s" < k8s/ha/scripts/setup-tailscale-main.sh
+
+      # ── omv-ha ─────────────────────────────────────────────────────────────
+
+      - name: Test — connect to omv-ha (via ProxyJump through omv-main)
+        if: inputs.target != 'main-only'
+        run: |
+          echo "=== omv-ha connectivity (ProxyJump) ==="
+          ssh omv-ha "echo OK; uname -a"
+
+      - name: Configure omv-ha — install Tailscale + join tailnet
+        if: inputs.target != 'main-only' && inputs.test_only == 'false'
+        run: |
+          echo "=== Applying setup-tailscale-ha.sh on omv-ha ==="
+          ssh omv-ha \
+            "export TS_AUTH_KEY='${{ secrets.TS_AUTH_KEY }}'; bash -s" \
+            < k8s/ha/scripts/setup-tailscale-ha.sh
+
+      # ── Final status ────────────────────────────────────────────────────────
+
+      - name: Final Tailscale status
+        run: |
+          {
+            echo "## Tailscale node status"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "${{ inputs.target }}" != "ha-only" ]]; then
+            echo "### omv-main" >> "$GITHUB_STEP_SUMMARY"
+            STATUS=$(ssh omv-main "tailscale status 2>&1 || echo '(tailscale not running or not installed)'" 2>&1)
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$STATUS" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$STATUS"
+          fi
+
+          if [[ "${{ inputs.target }}" != "main-only" ]]; then
+            echo "### omv-ha" >> "$GITHUB_STEP_SUMMARY"
+            STATUS=$(ssh omv-ha "tailscale status 2>&1 || echo '(tailscale not running or not installed)'" 2>&1)
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$STATUS" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$STATUS"
+          fi
+
+      - name: Next steps (after configure run)
+        if: inputs.test_only == 'false'
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+
+          ## Next steps
+
+          **Approve subnet route (one-time, browser):**
+          1. admin.tailscale.com → Machines → omv-main → "…" → Edit route settings
+          2. Toggle ON: `192.168.1.0/24`
+
+          **On your phone:**
+          - Tailscale app → Settings → Accept routes: **ON**
+          - SSH to omv-main: `ssh tbaltzakis@100.113.41.119` or `ssh tbaltzakis@omv-main`
+          - SSH to omv-ha:   `ssh tbaltzakis@omv-ha` (after route approval) or `ssh tbaltzakis@192.168.1.130`
+          EOF

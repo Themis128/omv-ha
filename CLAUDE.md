@@ -46,10 +46,10 @@ creating a separate task for every small change.
 
 | Node | Hardware | Role | LAN IP | Tailscale IP |
 |---|---|---|---|---|
-| `omv-main` | Pi 5 (Cortex-A76, 8 GB) | k3s **server** — control-plane + etcd | 192.168.1.128 | 100.113.41.119 |
+| `omv-main` (k8s node: **`omv`**) | Pi 5 (Cortex-A76, 8 GB) | k3s **server** — control-plane + etcd | 192.168.1.128 | 100.113.41.119 |
 | `omv-ha` | Pi 3B (Cortex-A53, 1 GB) | k3s **agent** only (demoted 2026-05-24) | 192.168.1.130 | — |
 
-**omv-ha demotion (2026-05-24):** omv-ha is now a k3s agent only — no etcd, no control-plane taint. NFS workloads (ntfy, alertmanager) that were running there are unaffected. The old control-plane role moved to omv-main.
+**omv-ha demotion (2026-05-24):** omv-ha is now a k3s agent only — no etcd, no control-plane taint. The old control-plane role moved to omv-main. (ntfy and alertmanager run on omv-main with NFS storage, not omv-ha.)
 
 ## omv-ha node (Pi 3B, 1 GB) — annual config checklist
 See Notion task "omv-ha PR #13 — annual config review" (due 2027-06-03) for the full checklist.
@@ -67,7 +67,7 @@ Key invariants to maintain (post-demotion state):
 | Workflow | File | Purpose |
 |----------|------|---------|
 | Keycloak removal | `.github/workflows/apply-keycloak-removal.yml` | Two-job: `cognito-setup` (AWS OIDC only, no Tailscale) + `cluster-apply` (needs `TS_OAUTH_*` secrets). Run with `apply_cluster=false` first if Tailscale isn't set up yet. |
-| Cloudflare LB | `.github/workflows/provision-cloudflare-lb.yml` | Create active-passive LB via API — needs `CF_LB_API_TOKEN` secret |
+| Cloudflare LB | `.github/workflows/provision-cloudflare-lb.yml` | Create active-passive LB via API — needs `CLOUDFLARE_API_TOKEN` secret (token B with LB:Edit scope) |
 | Tailscale OAuth | `.github/workflows/tailscale-connect.yml` | Reusable workflow for Tailscale in CI — needs `TS_OAUTH_CLIENT_ID` + `TS_OAUTH_SECRET` secrets |
 | AWS key rotation | `.github/workflows/rotate-aws-key.yml` | Rotate IAM keys via OIDC — needs `grant-iam-all.sh` run first |
 | Pi runner restart | `.github/workflows/restart-pi-runners.yml` | Restart/re-register self-hosted runners on omv-2/omv-3 |
@@ -84,14 +84,53 @@ bash k8s/ha/scripts/grant-iam-all.sh   # CloudShell-compatible (no --profile nee
 
 **apply-keycloak-removal.yml status:**
 - ✅ Pass 1 COMPLETE — Cognito client `cloudless-oauth2-proxy` (ID: `63d3fu5lp057694h0t70je4jk0`) exists; secret stored in SSM `/cloudless/production/oauth2-proxy-client-secret`
-- ⏸ Pass 2 DEFERRED — `cluster-apply` job needs Tailscale secrets; also `cloudless.online` domain is gone (2026-06-04), making oauth2-proxy deployment moot until domain/app is restored. Delete keycloak namespace manually when SSH access is available.
+- ⚠️ **Cognito callback URLs need updating** — client was created with `manage.cloudless.online` callbacks (now dead domain). Run from CloudShell:
+  ```bash
+  POOL_ID=$(aws ssm get-parameter --name /cloudless/production/COGNITO_USER_POOL_ID --query Parameter.Value --output text)
+  aws cognito-idp update-user-pool-client \
+    --user-pool-id "$POOL_ID" \
+    --client-id 63d3fu5lp057694h0t70je4jk0 \
+    --callback-urls "https://manage.cloudless.gr/oauth2/callback" \
+    --logout-urls "https://manage.cloudless.gr" \
+    --region us-east-1
+  ```
+- ⏸ Pass 2 DEFERRED — `cluster-apply` job needs Tailscale secrets; app subdomain routing (manage.cloudless.gr) must also be configured before oauth2-proxy is useful. Delete keycloak namespace manually when SSH access is available.
 
-**Security items — deferred to end of infrastructure build-out:**
-⚠️  Do NOT prioritise these until the infrastructure build-out is complete. Address as a batch once cluster and app are stable.
-- Revoke exposed CF token `cfut_ulgWeq...` → use `cloudflare-token-revoke.yml` workflow (no dashboard needed)
-- Create replacement CF token with `Zone:DNS:Edit` scope → `gh secret set CLOUDFLARE_API_TOKEN`
-- Create CF LB API token (`Load Balancers:Edit` + `Monitors and Pools:Edit`) — hold until domain/app decided
-- Rotate exposed IAM key `AKIAUBXIAELU5SADA3XL` (ses-smtp-prod) → use `rotate-aws-key.yml` workflow
+**Credential rotation — trigger via GitHub Actions UI (Actions tab → Run workflow):**
+All IAM permissions already granted (`grant-iam-all.sh` ✅ 2026-06-04). Execute in order:
+
+**Optimal CF token architecture (two tokens — see research 2026-06-06):**
+| Token name | Stored in | Scopes | Rotation |
+|---|---|---|---|
+| `gh-actions-dns-lb` | GitHub Secret `CLOUDFLARE_API_TOKEN` | Zone:DNS:Edit + Zone:Zone:Read + Zone:Load Balancing:Edit | Via `cloudflare-token-revoke.yml` + manual recreate |
+| `cert-manager-dns01` | k8s Secret `cloudflare-api-token` in `cert-manager` ns | Zone:DNS:Edit + Zone:Zone:Read | Manual: `kubectl create secret … --dry-run=client -o yaml \| kubectl apply -f -` |
+
+Both tokens: scope to **specific zone: cloudless.gr only** (not All Zones).
+Note: Cloudflare does NOT support GitHub OIDC federation — long-lived tokens required.
+
+| Step | Action | Where | Status |
+|---|---|---|---|
+| 1 | `CLOUDFLARE_API_TOKEN` was already empty/dead — confirmed by 3 failed workflow runs on 2026-06-06 (`Bearer ` blank in logs). No revocation needed. | — | ✅ |
+| 2 | Create **token A** `cert-manager-dns01`: Zone:DNS:Edit + Zone:Zone:Read, scope=cloudless.gr | dash.cloudflare.com → My Profile → API Tokens | ⬜ |
+| 3 | Create **token B** `gh-actions-dns-lb`: Zone:DNS:Edit + Zone:Zone:Read + Zone:LB:Edit, scope=cloudless.gr | dash.cloudflare.com → My Profile → API Tokens | ⬜ |
+| 4 | Run `bash k8s/ha/scripts/bootstrap-rotation.sh --token-a A --token-b B [--cloudless-pat ..] [--anthropic-key ..] [--aws-rotate] [--cognito]` — sets CLOUDFLARE_API_TOKEN, auto-fetches + sets CLOUDFLARE_ZONE_ID, optionally sets other secrets, triggers IAM rotation, updates Cognito callbacks | local machine with `gh` CLI authenticated | ⬜ |
+| 5 | ~~Find cloudless.gr zone ID → set repo variable~~ — handled automatically by `bootstrap-rotation.sh` via CF API | — | ✅ (script) |
+| 6 | Cognito callback update — pass `--cognito` to `bootstrap-rotation.sh` (requires `aws` CLI) | AWS CloudShell or local with `AWS_PROFILE=admin` | ⬜ |
+| 7 | Rotate ses-smtp-prod IAM key — pass `--aws-rotate` to `bootstrap-rotation.sh` (triggers `rotate-aws-key.yml` dry_run=true) | local machine with `gh` CLI | ⬜ |
+| 8 | After dry run passes, re-run `rotate-aws-key.yml` with `dry_run=false` → retrieve from SSM → update `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | AWS CloudShell | ⬜ |
+| 9 | Add `CLOUDLESS_PAT` + `ANTHROPIC_API_KEY` — pass `--cloudless-pat` + `--anthropic-key` to `bootstrap-rotation.sh` | local machine with `gh` CLI | ⬜ |
+| 10 | Create Tailscale OAuth client → run `bash k8s/ha/scripts/set-github-secrets.sh --ts-client-id ... --ts-client-secret ...` | admin.tailscale.com → Settings → OAuth | ⬜ |
+| 11 | cluster-apply Pass 2 (`apply_cluster=true`) | github.com/Themis128/omv-ha/actions | ⬜ |
+| 12 | Restore cloudless.gr DNS records — run `/cloudflare-status` then `cloudflare_bulk_restore_dns` | cloudless-infra MCP (once token set) | ⬜ |
+| 13 | Merge PR #16 | github.com/Themis128/omv-ha/pull/16 | ⬜ |
+
+After step 7 runs (dry_run=false), retrieve from SSM and update secrets via CloudShell:
+```bash
+SSM="/github-actions/aws-key/ses-smtp-prod"
+NEW_KEY=$(aws ssm get-parameter --name "${SSM}/access-key-id" --query Parameter.Value --output text)
+NEW_SECRET=$(aws ssm get-parameter --name "${SSM}/secret-access-key" --with-decryption --query Parameter.Value --output text)
+# Then update GitHub secrets via Settings → Secrets (or gh secret set if gh CLI available)
+```
 
 **⚠️ CREDENTIAL ROTATION REQUIRED — publicly exposed in git history (commit bbf3f61d, master, ~2026-05-09):**
 
@@ -133,6 +172,7 @@ gh workflow run apply-keycloak-removal.yml \
 - Exposed Cloudflare token scrubbed from all history via `git filter-repo` on 2026-06-03 (PR #13 branch)
 - n8n/duckdb/maintenance credentials scrubbed from all history via `git filter-repo` on 2026-06-06 (both master + PR branch force-pushed, verified via GitHub API)
 - All subsequent pushes to this branch are force-pushed due to rewritten history
+- **PR #16** (draft) — `claude/node-architecture-research-fuYGh` → master: Keycloak removal, Cognito migration, security scrub, ops tooling workflows + skills. Pending merge until credential rotation complete.
 
 ---
 
@@ -141,12 +181,12 @@ gh workflow run apply-keycloak-removal.yml \
 ### Node assignment
 | Workload type | Node | Reason |
 |---|---|---|
-| All primary user pods (deployments, statefulsets) | `omv-main` (Pi 5, 8 GB) | Main compute node |
+| All primary user pods (deployments, statefulsets) | `omv-main` (k8s node: `omv`, Pi 5, 8 GB) | Main compute node |
 | DaemonSets (node-exporter, flannel) | both nodes | DaemonSets schedule on all nodes |
 | `journal-vacuum-omv-ha` CronJob | `omv-ha` + nodeSelector | Needs hostPID to vacuum that node's journal |
-| Alertmanager, ntfy | `omv-ha` (NFS-backed) | NFS workloads unaffected by 2026-05-24 demotion |
+| Alertmanager, ntfy | `omv-main` (k8s node: `omv`) | Use NFS storage (ReadWriteMany) but run on omv-main; NFS accessible from any node |
 
-Note: omv-ha has ~700 MB RAM — keep workload count low. NFS-backed pods (ntfy, alertmanager) can stay there; memory-heavy pods (Prometheus, Metabase, ML) must be on omv-main.
+Note: omv-ha has ~700 MB RAM — keep workload count low. Only the `journal-vacuum-omv-ha` CronJob and `cloudflared-ha` deployment run there. All other pods (including NFS-backed ntfy and alertmanager) run on omv-main.
 
 ### ARM64 image requirement
 Every container image deployed to this cluster **must** support `linux/arm64` (aarch64).
@@ -184,7 +224,7 @@ Rough budget for omv-main:
 ### Pre-deploy checklist (before `kubectl apply` or `helm upgrade`)
 1. Secrets exist: `kubectl get secret <name> -n <namespace>`
 2. PVCs provisioned (if needed): `kubectl get pvc -n <namespace>`
-3. Node selector is `omv-main` for memory-heavy workloads; `omv-ha` only for NFS-backed lightweight pods
+3. Node selector is `kubernetes.io/hostname: omv` for all pods except `journal-vacuum-omv-ha` (which must target `omv-ha`) and `cloudflared-ha`
 4. Image has arm64 variant
 5. Resource limits set on all containers
 6. `storageClassName` matches node selector (local-path only if pinned to omv-main)

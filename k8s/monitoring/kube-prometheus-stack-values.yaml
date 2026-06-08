@@ -36,7 +36,7 @@ defaultRules:
     KubeProxyDown: true              # k3s uses kube-router, no kube-proxy
     NodeRAIDDegraded: true           # irrelevant on NVMe/SD Pi hardware
     NodeRAIDDiskFailure: true        # irrelevant on NVMe/SD Pi hardware
-    NodeFileDescriptorLimit: true    # trips constantly on Pi 4 (1GB) under normal load
+    NodeFileDescriptorLimit: true    # trips constantly on Pi 3B (1GB) under normal load
     KubeAPIErrorBudgetBurn: true     # production SLO burn rate — too noisy for homelab
 
 # Not accessible separately in k3s (embedded in binary)
@@ -83,7 +83,7 @@ alertmanager:
           matchers: [alertname = "Watchdog"]
         - receiver: "null"
           matchers: [alertname = "InfoInhibitor"]
-        # ntfy: critical alerts → immediate push to ntfy.cloudless.online/alerts (continue fan-out)
+        # ntfy: critical alerts → immediate push to ntfy.cloudless.gr/alerts (continue fan-out)
         - receiver: "ntfy-alerts"
           matchers: [severity = "critical"]
           continue: true
@@ -118,7 +118,9 @@ alertmanager:
             http_config:
               basic_auth:
                 username: alertmanager
-                password: "am-ntfy-2026!"
+                # Password mounted from k8s secret (never inline) — see
+                # alertmanagerSpec.secrets below + k8s/monitoring/scripts/create-ntfy-basic-auth.sh
+                password_file: /etc/alertmanager/secrets/ntfy-basic-auth/password
       - name: "oncall-webhook"
         webhook_configs:
           - url: "http://oncall-engine.oncall.svc.cluster.local:8080/integrations/v1/alertmanager/aed2bf7d35817a5e8f27306c35d3/"
@@ -132,6 +134,11 @@ alertmanager:
             max_alerts: 20
   alertmanagerSpec:
     replicas: 1
+    # Mounts secret `ntfy-basic-auth` (key: password) at
+    # /etc/alertmanager/secrets/ntfy-basic-auth/password for the ntfy receiver's
+    # basic_auth password_file. Create with create-ntfy-basic-auth.sh.
+    secrets:
+      - ntfy-basic-auth
     nodeSelector:
       kubernetes.io/hostname: omv
     retention: 24h
@@ -254,7 +261,7 @@ grafana:
 
   grafana.ini:
     server:
-      root_url: "https://grafana.cloudless.online"
+      root_url: "https://grafana.cloudless.gr"
       enable_gzip: true
 
     # SQLite WAL: critical for alert-state write performance on ARM

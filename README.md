@@ -1,13 +1,13 @@
 # OMV-HA — Cloudless k3s Cluster
 
-Two-node embedded-etcd k3s cluster running on Raspberry Pi hardware, serving [cloudless.online](https://cloudless.online) and acting as the secondary path for [cloudless.gr](https://cloudless.gr).
+Two-node embedded-etcd k3s cluster running on Raspberry Pi hardware, serving [cloudless.gr](https://cloudless.gr) and acting as the secondary path for [cloudless.gr](https://cloudless.gr).
 
 ## Nodes
 
 | Hostname | Hardware | Role | IP |
 |----------|----------|------|----|
-| `omv` | Pi 5 (8 GB) | server + worker | 192.168.1.128 |
-| `omv-ha` | Pi 4 (1 GB) | server + worker | 192.168.1.130 |
+| `omv-main` (k8s node: `omv`) | Pi 5 (8 GB) | server + worker | 192.168.1.128 |
+| `omv-ha` | Pi 3B (1 GB) | agent only (demoted 2026-05-24) | 192.168.1.130 |
 | VIP | keepalived VRRP | kube-apiserver endpoint | 192.168.1.200 |
 
 WireGuard CNI (flannel-native). etcd heartbeat 300 ms / election 3000 ms (tuned for SD-card fsync latency).
@@ -66,11 +66,11 @@ Set with `gh secret set NAME` (secrets) or `gh variable set NAME --body VALUE` (
 |------|------|---------|---------------|
 | `PI_SSH_KEY` | Secret | `restart-pi-runners.yml` | Private key with SSH access to omv-2/omv-3 |
 | `RUNNER_REGISTRATION_PAT` | Secret | `restart-pi-runners.yml` | GitHub PAT → repo scope |
-| `CF_LB_API_TOKEN` | Secret | `provision-cloudflare-lb.yml` | Cloudflare dashboard → API Tokens → scopes: `Load Balancers:Edit`, `Load Balancing Monitors and Pools:Edit` |
+| `CLOUDFLARE_API_TOKEN` | Secret | `provision-cloudflare-lb.yml`, DNS workflows | Token B `gh-actions-dns-lb`: scopes `Zone:DNS:Edit`, `Zone:Zone:Read`, `Zone:Load Balancing:Edit` — scope to cloudless.gr only |
 | `TS_OAUTH_CLIENT_ID` | Secret | `tailscale-connect.yml` | Tailscale admin → Settings → OAuth Clients → scope: `auth_keys` |
 | `TS_OAUTH_SECRET` | Secret | `tailscale-connect.yml` | Same OAuth client creation as above |
 | `CLOUDFLARE_ACCOUNT_ID` | Variable | `provision-cloudflare-lb.yml` | `fb7dc7b69b662480cd5961a4d1913c78` |
-| `CLOUDFLARE_ZONE_ID` | Variable | `provision-cloudflare-lb.yml` | Zone ID for the target hostname (cloudless.online: `aa875388a91714c369b1e20107e643f5`) |
+| `CLOUDFLARE_ZONE_ID` | Variable | `provision-cloudflare-lb.yml` | cloudless.gr zone ID — find at dash.cloudflare.com → cloudless.gr → Overview (right sidebar) |
 
 ## Deploy order (fresh cluster)
 
@@ -82,8 +82,9 @@ helm upgrade --install kube-prom prometheus-community/kube-prometheus-stack \
   -n monitoring --create-namespace \
   -f k8s/monitoring/kube-prometheus-stack-values.yaml
 
-# 3. OnCall deps (MariaDB + Redis)
-kubectl apply -f k8s/oncall/oncall-deps.yaml
+# 3. OnCall deps (MariaDB + Redis) — secrets are generated, never committed
+bash k8s/oncall/scripts/create-oncall-secrets.sh
+kubectl apply -f k8s-temp/oncall-deps.yaml   # MariaDB + Redis StatefulSets
 
 # 4. OnCall engine (Helm)
 helm upgrade --install oncall grafana/oncall -n oncall --create-namespace \
@@ -111,13 +112,15 @@ kubectl apply -f k8s/monitoring/analytics-prometheusrules.yaml
 
 ## Cloudflare Tunnel
 
-All `*.cloudless.online` traffic enters via a Cloudflare tunnel (`cloudflared` on omv-main, tunnel ID `a82f24a8`). There is no public IPv4 inbound — only the tunnel and IPv6.
+All `*.cloudless.gr` traffic enters via a Cloudflare tunnel (`cloudflared` on omv-main, tunnel ID `a82f24a8`). There is no public IPv4 inbound — only the tunnel and IPv6.
 
 ## cloudless.gr failover
 
-`cloudless.gr` uses Route 53 failover routing:
+`cloudless.gr` uses CloudFront origin groups for failover:
 - **PRIMARY**: CloudFront → SST/OpenNext Lambda (managed in `Themis128/cloudless.gr`)
-- **SECONDARY**: API Gateway → `cloudless-pi-proxy` Lambda → Pi over IPv6
+- **SECONDARY**: CloudFront → Tailscale Funnel (`omv.tail8eb71.ts.net`) → Traefik VIP → Pi cluster
+
+Route 53 SECONDARY records (API Gateway path) were retired 2026-05-23; HA failover is now handled entirely by the CloudFront origin group `primary-with-ha`.
 
 ## etcd recovery
 

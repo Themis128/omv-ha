@@ -2,15 +2,15 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: oncall-cloudless-online-tls
+  name: oncall-gr-tls
   namespace: oncall
 spec:
   dnsNames:
-    - oncall.cloudless.online
+    - oncall.cloudless.gr
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-cloudflare
-  secretName: oncall-cloudless-online-tls
+  secretName: oncall-gr-tls
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -25,7 +25,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: oncall.cloudless.online
+    - host: oncall.cloudless.gr
       http:
         paths:
           - path: /
@@ -37,8 +37,8 @@ spec:
                   number: 8080
   tls:
     - hosts:
-        - oncall.cloudless.online
-      secretName: oncall-cloudless-online-tls
+        - oncall.cloudless.gr
+      secretName: oncall-gr-tls
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -53,7 +53,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: oncall.cloudless.online
+    - host: oncall.cloudless.gr
       http:
         paths:
           - path: /integrations/
@@ -65,5 +65,5 @@ spec:
                   number: 8080
   tls:
     - hosts:
-        - oncall.cloudless.online
-      secretName: oncall-cloudless-online-tls
+        - oncall.cloudless.gr
+      secretName: oncall-gr-tls

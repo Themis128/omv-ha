@@ -1,15 +1,15 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: oncall-cloudless-online-tls
+  name: oncall-gr-tls
   namespace: oncall
 spec:
-  secretName: oncall-cloudless-online-tls
+  secretName: oncall-gr-tls
   issuerRef:
     name: letsencrypt-cloudflare
     kind: ClusterIssuer
   dnsNames:
-    - oncall.cloudless.online
+    - oncall.cloudless.gr
 ---
 # ── Webhook ingress (PUBLIC — rate-limited only) ──────────────────────────────
 # /integrations/v1/<token>/ paths receive inbound alerts from external sources
@@ -29,7 +29,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-  - host: oncall.cloudless.online
+  - host: oncall.cloudless.gr
     http:
       paths:
       - path: /integrations/
@@ -41,8 +41,8 @@ spec:
               number: 8080
   tls:
   - hosts:
-    - oncall.cloudless.online
-    secretName: oncall-cloudless-online-tls
+    - oncall.cloudless.gr
+    secretName: oncall-gr-tls
 ---
 # ── Admin ingress (PROTECTED — rate-limit + basicauth) ───────────────────────
 # Covers everything not matched by the webhook ingress above.
@@ -61,7 +61,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-  - host: oncall.cloudless.online
+  - host: oncall.cloudless.gr
     http:
       paths:
       - path: /
@@ -73,5 +73,5 @@ spec:
               number: 8080
   tls:
   - hosts:
-    - oncall.cloudless.online
-    secretName: oncall-cloudless-online-tls
+    - oncall.cloudless.gr
+    secretName: oncall-gr-tls

@@ -77,13 +77,13 @@ spec:
               containerPort: 5678
           env:
             - name: N8N_HOST
-              value: "n8n.cloudless.online"
+              value: "n8n.cloudless.gr"
             - name: N8N_PORT
               value: "5678"
             - name: N8N_PROTOCOL
               value: "https"
             - name: WEBHOOK_URL
-              value: "https://n8n.cloudless.online/"
+              value: "https://n8n.cloudless.gr/"
             - name: GENERIC_TIMEZONE
               value: "Europe/Athens"
             - name: N8N_ENCRYPTION_KEY
@@ -173,7 +173,7 @@ spec:
     name: letsencrypt-cloudflare
     kind: ClusterIssuer
   dnsNames:
-    - n8n.cloudless.online
+    - n8n.cloudless.gr
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -190,10 +190,10 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - n8n.cloudless.online
+        - n8n.cloudless.gr
       secretName: n8n-tls
   rules:
-    - host: n8n.cloudless.online
+    - host: n8n.cloudless.gr
       http:
         paths:
           - path: /

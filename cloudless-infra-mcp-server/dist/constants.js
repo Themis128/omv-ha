@@ -48,10 +48,13 @@ export const PI_SECONDARY_PORT = 18443;
 // Max characters to return in a single tool response
 export const CHARACTER_LIMIT = 20000;
 // ---------------------------------------------------------------------------
-// Cloudflare — cloudless.online zone
+// Cloudflare — cloudless.gr zone
+// NOTE: default CLOUDFLARE_ZONE_ID below belonged to the old domain (dead).
+// Set CLOUDFLARE_ZONE_ID env var to the cloudless.gr zone ID before use.
+// Find it: dash.cloudflare.com → cloudless.gr → Overview (right sidebar)
 // ---------------------------------------------------------------------------
 export const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN ?? "";
 export const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID ?? "fb7dc7b69b662480cd5961a4d1913c78";
-export const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID ?? "aa875388a91714c369b1e20107e643f5";
+export const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID ?? ""; // TODO: set to cloudless.gr zone ID
 export const CLOUDFLARE_TUNNEL_ID = "a82f24a8-f767-4a59-bc77-1d59ad132be2";
 //# sourceMappingURL=constants.js.map

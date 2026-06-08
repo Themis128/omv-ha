@@ -207,7 +207,7 @@ Returns a pass/fail table with occurrence counts. Run after any navbar change.`,
     // ── frontend_check_pwa ────────────────────────────────────────────────────
     server.registerTool("frontend_check_pwa", {
         title: "Frontend — Audit PWA Manifest",
-        description: `Validate the PWA manifest configuration for cloudless.gr/cloudless.online.
+        description: `Validate the PWA manifest configuration for cloudless.gr/cloudless.gr.
 Checks brand-critical fields: theme_color (#0a7785), background_color (#fcfcfd),
 display_override array, start_url tracking param, id/scope/lang, icon purposes, and shortcuts.
 
@@ -223,7 +223,7 @@ source options:
             live_url: z
                 .string()
                 .optional()
-                .describe('Base URL for live check, e.g. "https://cloudless.online". Required when source=live.'),
+                .describe('Base URL for live check, e.g. "https://cloudless.gr". Required when source=live.'),
         }),
         annotations: { readOnlyHint: true, destructiveHint: false },
     }, async ({ source, live_url }) => {
@@ -233,7 +233,7 @@ source options:
                     content: [
                         {
                             type: "text",
-                            text: "❌ live_url is required when source=live (e.g. https://cloudless.online)",
+                            text: "❌ live_url is required when source=live (e.g. https://cloudless.gr)",
                         },
                     ],
                 };

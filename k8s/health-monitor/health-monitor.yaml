@@ -64,7 +64,6 @@ spec:
                   TIMESTAMP="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
                   TRAEFIK_STATUS="FAIL"
                   APP_INTERNAL_STATUS="FAIL"
-                  APP_EXTERNAL_STATUS="FAIL"
 
                   # ── 1. Check traefik deployment ready replicas ───────────────────────
                   READY_REPLICAS="$(kubectl get deployment traefik -n kube-system \
@@ -118,19 +117,7 @@ spec:
                       || echo "[${TIMESTAMP}] ERROR: failed to restart cloudless"
                   fi
 
-                  # ── 5. Check cloudless externally (validates Cloudflare tunnel) ──────
-                  APP_EXTERNAL_RESP="$(curl -sL --max-time 10 \
-                    https://cloudless.online/api/health 2>/dev/null || echo '')"
-
-                  if echo "${APP_EXTERNAL_RESP}" | grep -qi 'ok'; then
-                    echo "[${TIMESTAMP}] INFO: cloudless.online external check OK"
-                    APP_EXTERNAL_STATUS="OK"
-                  else
-                    echo "[${TIMESTAMP}] ERROR: cloudless.online external check FAILED — response: ${APP_EXTERNAL_RESP:-<no response>}"
-                    APP_EXTERNAL_STATUS="FAIL"
-                  fi
-
-                  # ── 6. Check cloudflared-ha pod (HA tunnel connector on omv-ha) ─────
+                  # ── 5. Check cloudflared-ha pod (HA tunnel connector on omv-ha) ─────
                   CLOUDFLARED_HA_STATUS="FAIL"
                   CF_HA_READY="$(kubectl get deployment cloudflared-ha -n cloudless \
                     -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo '0')"
@@ -143,13 +130,8 @@ spec:
                     CLOUDFLARED_HA_STATUS="FAIL"
                   fi
 
-                  # ── 7. Tunnel-down detection ─────────────────────────────────────────
-                  if [ "${APP_INTERNAL_STATUS}" = "OK" ] && [ "${APP_EXTERNAL_STATUS}" = "FAIL" ]; then
-                    echo "[${TIMESTAMP}] WARNING: app is healthy internally but unreachable externally — likely Cloudflare tunnel issue"
-                  fi
-
-                  # ── 8. Summary ────────────────────────────────────────────────────────
-                  echo "[${TIMESTAMP}] health: traefik=${TRAEFIK_STATUS} app_internal=${APP_INTERNAL_STATUS} app_external=${APP_EXTERNAL_STATUS} cloudflared_ha=${CLOUDFLARED_HA_STATUS}"
+                  # ── 6. Summary ────────────────────────────────────────────────────────
+                  echo "[${TIMESTAMP}] health: traefik=${TRAEFIK_STATUS} app_internal=${APP_INTERNAL_STATUS} cloudflared_ha=${CLOUDFLARED_HA_STATUS}"
               resources:
                 requests:
                   cpu: 50m

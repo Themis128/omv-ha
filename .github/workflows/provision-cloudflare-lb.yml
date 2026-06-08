@@ -4,16 +4,16 @@ name: Provision Cloudflare Load Balancer
 # Run once manually; re-running is idempotent (updates existing resources).
 #
 # Required secrets:
-#   CF_LB_API_TOKEN  — Cloudflare API token with scopes:
-#                       Account: Load Balancers (Edit), Load Balancing Monitors and Pools (Edit)
-#                       Zone:    Load Balancers (Edit)
+#   CLOUDFLARE_API_TOKEN  — Cloudflare API token with scopes:
+#                            Zone:DNS:Edit, Zone:Zone:Read, Zone:Load Balancing:Edit
+#                            (token B "gh-actions-dns-lb" — also used by dns-related workflows)
 #
 # Required variables (set with: gh variable set NAME --body VALUE):
 #   CLOUDFLARE_ACCOUNT_ID  — Cloudflare account ID
 #   CLOUDFLARE_ZONE_ID     — Zone ID for the hostname being load-balanced
 #
 # Inputs:
-#   hostname       — e.g. "cloudless.gr" or "api.cloudless.online"
+#   hostname       — e.g. "cloudless.gr" or "api.cloudless.gr"
 #   primary_origin — e.g. "dxxxxxxxxxxxx.cloudfront.net" or an IP
 #   secondary_origin — e.g. IPv6 address or hostname for Pi fallback
 
@@ -30,7 +30,7 @@ on:
         description: "Primary origin port"
         default: "443"
       secondary_origin:
-        description: "Secondary (failover) origin address (e.g. Pi IPv6 or VIP)"
+        description: "Secondary (failover) origin address (e.g. Tailscale Funnel: omv.tail8eb71.ts.net)"
         required: true
       secondary_origin_port:
         description: "Secondary origin port"
@@ -48,7 +48,7 @@ jobs:
     name: Provision LB — ${{ inputs.hostname }}
     runs-on: ubuntu-latest
     env:
-      CF_TOKEN: ${{ secrets.CF_LB_API_TOKEN }}
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CF_ACCOUNT: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CF_ZONE: ${{ vars.CLOUDFLARE_ZONE_ID }}
       DRY_RUN: ${{ inputs.dry_run }}
@@ -57,7 +57,7 @@ jobs:
       - name: Validate secrets
         run: |
           if [ -z "${CF_TOKEN}" ]; then
-            echo "::error::CF_LB_API_TOKEN secret is not set"
+            echo "::error::CLOUDFLARE_API_TOKEN secret is not set"
             exit 1
           fi
           if [ -z "${CF_ACCOUNT}" ] || [ -z "${CF_ZONE}" ]; then

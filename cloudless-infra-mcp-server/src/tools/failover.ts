@@ -245,12 +245,12 @@ All curls go directly to 192.168.1.200:18443 (k3s Traefik MetalLB VIP).`,
   server.registerTool(
     "ha_cleanup_cloudless_online",
     {
-      title: "Clean Up cloudless.online Artifacts",
-      description: `Remove remaining cloudless.online references from the k3s cluster.
+      title: "Clean Up cloudless.gr Artifacts",
+      description: `Remove remaining cloudless.gr references from the k3s cluster.
 Actions taken:
-- Deletes the cloudless-online-tls Certificate resource in the cloudless namespace
-- Deletes the cloudless-online-tls Secret in the cloudless namespace
-- Reports any remaining cloudless.online references in manifests
+- Deletes the cloudless-gr-tls Certificate resource in the cloudless namespace
+- Deletes the cloudless-gr-tls Secret in the cloudless namespace
+- Reports any remaining cloudless.gr references in manifests
 Does NOT touch Cloudflare DNS records (use cloudflare_delete_dns_record for those).
 Does NOT touch Route 53 health check 30a69f1c (needs console — no CLI permission).
 SAFE to run multiple times (idempotent).`,
@@ -264,15 +264,15 @@ SAFE to run multiple times (idempotent).`,
     },
     async ({ dry_run }) => {
       const checkCmd =
-        `echo '=== cloudless-online-tls certificate ===' && kubectl get certificate cloudless-online-tls -n cloudless 2>&1` +
-        ` && echo '=== cloudless-online-tls secret ===' && kubectl get secret cloudless-online-tls -n cloudless 2>&1` +
-        ` && echo '=== remaining .online references in ingress/configmaps ===' && kubectl get ingress,configmap -n cloudless -o yaml 2>&1 | grep 'cloudless.online' | head -10 || echo '(none found)'`;
+        `echo '=== cloudless-gr-tls certificate ===' && kubectl get certificate cloudless-gr-tls -n cloudless 2>&1` +
+        ` && echo '=== cloudless-gr-tls secret ===' && kubectl get secret cloudless-gr-tls -n cloudless 2>&1` +
+        ` && echo '=== remaining .online references in ingress/configmaps ===' && kubectl get ingress,configmap -n cloudless -o yaml 2>&1 | grep 'cloudless.gr' | head -10 || echo '(none found)'`;
 
       const deleteCmd =
-        `kubectl delete certificate cloudless-online-tls -n cloudless 2>&1 || echo '(certificate already gone)'` +
-        ` && kubectl delete secret cloudless-online-tls -n cloudless 2>&1 || echo '(secret already gone)'` +
-        ` && echo '✅ Deleted cloudless-online-tls certificate and secret'` +
-        ` && echo '=== Remaining references ===' && kubectl get all,ingress,certificate -n cloudless -o yaml 2>&1 | grep 'cloudless.online' | head -10 || echo '(none remaining)'`;
+        `kubectl delete certificate cloudless-gr-tls -n cloudless 2>&1 || echo '(certificate already gone)'` +
+        ` && kubectl delete secret cloudless-gr-tls -n cloudless 2>&1 || echo '(secret already gone)'` +
+        ` && echo '✅ Deleted cloudless-gr-tls certificate and secret'` +
+        ` && echo '=== Remaining references ===' && kubectl get all,ingress,certificate -n cloudless -o yaml 2>&1 | grep 'cloudless.gr' | head -10 || echo '(none remaining)'`;
 
       if (dry_run) {
         const r = await runOnNode("omv-main", checkCmd);
@@ -281,7 +281,7 @@ SAFE to run multiple times (idempotent).`,
           content: [
             {
               type: "text",
-              text: `# cloudless.online Cleanup — DRY RUN\n\nRun with \`dry_run: false\` to actually delete.\n\n\`\`\`\n${body}\n\`\`\`\n\n**Remaining manual steps:**\n- Delete R53 health check \`30a69f1c\` via AWS console (no CLI permission)\n- Delete Cloudflare DNS records for cloudless.online zone via \`cloudflare_delete_dns_record\``,
+              text: `# cloudless.gr Cleanup — DRY RUN\n\nRun with \`dry_run: false\` to actually delete.\n\n\`\`\`\n${body}\n\`\`\`\n\n**Remaining manual steps:**\n- Delete R53 health check \`30a69f1c\` via AWS console (no CLI permission)\n- Delete Cloudflare DNS records for cloudless.gr zone via \`cloudflare_delete_dns_record\``,
             },
           ],
         };
@@ -293,7 +293,7 @@ SAFE to run multiple times (idempotent).`,
         content: [
           {
             type: "text",
-            text: `# cloudless.online Cleanup — EXECUTED\n\n\`\`\`\n${body}\n\`\`\`\n\n**Remaining manual steps:**\n- Delete R53 health check \`30a69f1c\` via AWS console\n- Delete Cloudflare DNS records for cloudless.online zone via \`cloudflare_delete_dns_record\``,
+            text: `# cloudless.gr Cleanup — EXECUTED\n\n\`\`\`\n${body}\n\`\`\`\n\n**Remaining manual steps:**\n- Delete R53 health check \`30a69f1c\` via AWS console\n- Delete Cloudflare DNS records for cloudless.gr zone via \`cloudflare_delete_dns_record\``,
           },
         ],
       };

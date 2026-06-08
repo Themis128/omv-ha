@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # setup-oauth2-proxy-cognito.sh
 #
-# Wires oauth2-proxy to use Cognito OIDC for manage.cloudless.online.
+# Wires oauth2-proxy to use Cognito OIDC for manage.cloudless.gr.
 # Creates the dedicated Cognito app client, k8s ConfigMap, k8s Secret,
 # and applies the deployment in one shot.
 #
@@ -23,8 +23,8 @@ PROFILE="${AWS_PROFILE:-admin}"
 REGION="us-east-1"
 POOL_NAME="${POOL_NAME:-cloudless-auth}"
 COGNITO_DOMAIN="https://cloudless-auth.auth.us-east-1.amazoncognito.com"
-CALLBACK_URL="https://manage.cloudless.online/oauth2/callback"
-LOGOUT_URL="https://manage.cloudless.online"
+CALLBACK_URL="https://manage.cloudless.gr/oauth2/callback"
+LOGOUT_URL="https://manage.cloudless.gr"
 
 # ─── Step 1: Resolve Pool ID ──────────────────────────────────────────────────
 if [[ -n "${COGNITO_POOL_ID:-}" ]]; then
@@ -157,9 +157,9 @@ echo "   Pool ID:      $POOL_ID"
 echo "   Issuer URL:   $OIDC_ISSUER_URL"
 echo "   Client ID:    $CLIENT_ID"
 echo ""
-echo "  Test:    curl -I https://manage.cloudless.online  (expect 302 → Cognito)"
-echo "  Browser: https://manage.cloudless.online"
+echo "  Test:    curl -I https://manage.cloudless.gr  (expect 302 → Cognito)"
+echo "  Browser: https://manage.cloudless.gr"
 echo ""
 echo "Remaining cleanup:"
 echo "  kubectl delete namespace keycloak         # remove live Keycloak resources"
-echo "  # Remove auth.cloudless.online CNAME in Cloudflare dashboard"
+echo "  # Remove auth.cloudless.gr CNAME in Cloudflare dashboard"

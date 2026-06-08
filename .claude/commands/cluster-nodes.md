@@ -21,12 +21,7 @@ kubectl get nodes -o custom-columns="NODE:.metadata.name,TAINTS:.spec.taints[*].
 
 Expected:
 - `omv` → no taints (general-purpose worker)
-- `omv-ha` → `node-role.kubernetes.io/control-plane:NoSchedule`
-
-If omv-ha is missing its taint, re-apply:
-```bash
-kubectl taint nodes omv-ha node-role.kubernetes.io/control-plane=:NoSchedule
-```
+- `omv-ha` → no taints (agent-only since 2026-05-24; control-plane taint removed at demotion)
 
 ## 3. Resource allocation
 
@@ -48,19 +43,22 @@ kubectl get pods -A -o wide --field-selector spec.nodeName=omv-ha \
   --no-headers | awk '{print $1, $2, $4}' | column -t | sort
 ```
 
-**Expected on omv-ha** (only system + DaemonSets):
+**Expected on omv-ha** (DaemonSets + two pinned workloads):
 - `kube-system`: flannel/wireguard DaemonSet pod, kube-proxy (if applicable), metrics-server
 - `monitoring`: node-exporter DaemonSet pod
-- Nothing else — user workloads here means the taint is missing or pods have incorrect tolerations
+- `cloudless`: `cloudflared-ha` Deployment (second Cloudflare tunnel connector, nodeSelector=omv-ha)
+- `kube-system`: `journal-vacuum-omv-ha` CronJob (nodeSelector=omv-ha)
+- Any other user pod here is unexpected — check nodeSelector on that deployment
 
-**Expected on omv** (all user workloads):
+**Expected on omv** (all other user workloads):
 - `analytics`: metabase, duckdb-api, ML jobs, s3-sync
 - `monitoring`: prometheus, grafana, alertmanager, kube-state-metrics
 - `n8n`: n8n
 - `ntfy`: ntfy
 - `oncall`: oncall-engine, oncall-celery, oncall-mariadb, oncall-redis
-- `cloudless`: cloudless-manager, cloudless-app, oauth2-proxy, cloudflared, cloudflared-ha
+- `cloudless`: cloudless-manager, cloudless-app, oauth2-proxy
 - `home-assistant`: home-assistant
+- Note: `cloudflared` (primary connector) runs as a **systemd service on omv-main**, not a pod
 
 ## 5. Memory pressure check (omv-ha 1 GB limit)
 
@@ -78,11 +76,11 @@ If these are missing → run `k8s/ha/scripts/apply-omv-ha-memory-ceiling.sh`.
 NODES: HEALTHY / DEGRADED
 
 omv (Pi 5, 8 GB)      ✅  Ready — CPU: X%  RAM: XGB/7.5GB  Disk: X%
-omv-ha (Pi 4, 1 GB)   ✅  Ready — CPU: X%  RAM: XMB/900MB  Disk: X%
+omv-ha (Pi 3B, 1 GB)  ✅  Ready — CPU: X%  RAM: XMB/900MB  Disk: X%
 
 Taints:
   omv      — none (general worker) ✅
-  omv-ha   — control-plane:NoSchedule ✅/❌
+  omv-ha   — none (agent only, demoted 2026-05-24) ✅
 
 Pod distribution:
   omv:    N pods across N namespaces

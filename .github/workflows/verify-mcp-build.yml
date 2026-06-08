@@ -1,0 +1,79 @@
+name: Verify MCP server build
+
+# Fails if the committed cloudless-infra-mcp-server/dist/ has drifted from src/.
+# dist/ is intentionally tracked (so .mcp.json can run it without a build step),
+# which means it must always match a fresh `pnpm run build`.
+
+on:
+  push:
+    paths:
+      - "cloudless-infra-mcp-server/src/**"
+      - "cloudless-infra-mcp-server/package.json"
+      - "cloudless-infra-mcp-server/pnpm-lock.yaml"
+      - "cloudless-infra-mcp-server/tsconfig.json"
+      - ".github/workflows/verify-mcp-build.yml"
+  pull_request:
+    paths:
+      - "cloudless-infra-mcp-server/src/**"
+      - "cloudless-infra-mcp-server/package.json"
+      - "cloudless-infra-mcp-server/pnpm-lock.yaml"
+      - "cloudless-infra-mcp-server/tsconfig.json"
+
+jobs:
+  verify-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloudless-infra-mcp-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: cloudless-infra-mcp-server/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Smoke-test server (initialize + tools/list over stdio)
+        run: |
+          node --input-type=module <<'EOF'
+          import { spawn } from "node:child_process";
+          const srv = spawn("node", ["dist/index.js"], { stdio: ["pipe","pipe","pipe"] });
+          let out = "";
+          srv.stdout.on("data", d => out += d);
+          const send = o => srv.stdin.write(JSON.stringify(o) + "\n");
+          send({ jsonrpc:"2.0", id:1, method:"initialize", params:{ protocolVersion:"2024-11-05", capabilities:{}, clientInfo:{ name:"ci", version:"0" } } });
+          send({ jsonrpc:"2.0", method:"notifications/initialized" });
+          send({ jsonrpc:"2.0", id:2, method:"tools/list", params:{} });
+          setTimeout(() => {
+            srv.kill();
+            const r = out.split("\n").filter(Boolean)
+              .map(l => { try { return JSON.parse(l); } catch { return null; } })
+              .find(m => m && m.id === 2);
+            if (!r || !r.result?.tools?.length) {
+              console.error("FAIL: server did not return a tools list");
+              process.exit(1);
+            }
+            console.log(`OK: server listed ${r.result.tools.length} tools`);
+            process.exit(0);
+          }, 2000);
+          EOF
+
+      - name: Fail if dist/ is out of sync with a fresh build
+        run: |
+          if ! git diff --exit-code -- dist; then
+            echo "::error::cloudless-infra-mcp-server/dist is out of date."
+            echo "Run 'cd cloudless-infra-mcp-server && pnpm run build' and commit the result."
+            exit 1
+          fi
+          echo "dist/ matches a fresh build."

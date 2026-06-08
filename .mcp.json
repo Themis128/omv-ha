@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cloudless-infra": {
+      "command": "node",
+      "args": ["cloudless-infra-mcp-server/dist/index.js"]
+    }
+  }
+}

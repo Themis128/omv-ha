@@ -3,7 +3,7 @@
 # Source of truth: Themis128/cloudless-manager repo (CI applies its own manifest)
 #
 # OVERRIDE: this file pins cloudless-manager to omv (Pi5 8GB) because omv-ha
-# (Pi4 1GB) only has ~455Mi Kubernetes-allocatable RAM, and cloudless-manager's
+# (Pi 3B 1GB) only has ~455Mi Kubernetes-allocatable RAM, and cloudless-manager's
 # 128Mi request pushes it into OOM territory (confirmed exit 137, 2026-05-16).
 #
 # Re-apply this after every cloudless-manager CI deploy:
@@ -29,7 +29,7 @@ spec:
       labels:
         app: cloudless-manager
     spec:
-      # Pin to omv (Pi5 8GB) — omv-ha (Pi4 1GB) has insufficient RAM.
+      # Pin to omv (Pi5 8GB) — omv-ha (Pi 3B 1GB) has insufficient RAM.
       # Hard podAntiAffinity removed; single replica makes it redundant.
       nodeSelector:
         kubernetes.io/hostname: omv

@@ -13,7 +13,7 @@ allowed-tools: >
   mcp__cloudless-infra__k3s_get_pod_logs,
   mcp__cloudless-infra__k3s_restart_deployment,
   mcp__cloudless-infra__cloudflare_tunnel_status,
-  mcp__cloudless-infra__aws_check_health_checks,
+  mcp__cloudless-infra__aws_get_infrastructure_summary,
   mcp__cloudless-infra__metabase_check_health,
   mcp__cloudless-infra__ml_pipeline_status,
   mcp__Kubernetes_MCP_Server__kubectl_get,
@@ -112,7 +112,7 @@ Identify memory hog:
 kubectl top pods -A --sort-by=memory | head -20
 ```
 
-**omv-ha (Pi 4) memory pressure — critical:**
+**omv-ha (Pi 3B) memory pressure — critical:**
 ```bash
 ssh tbaltzakis@192.168.1.130 "free -m; systemctl show k3s --property=MemoryHigh,MemoryMax,MemoryCurrent"
 ```
@@ -136,7 +136,7 @@ kubectl port-forward -n monitoring svc/monitoring-prometheus 9090:9090 &
 curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.health != "up") | {job: .labels.job, instance: .labels.instance, error: .lastError}'
 ```
 
-Or check via Grafana at `https://grafana.cloudless.online`.
+Or check via Grafana at `https://grafana.cloudless.gr`.
 
 If a ServiceMonitor target is down:
 1. Verify the service/pod is Running
@@ -172,7 +172,7 @@ If >80% → increase `retentionSize` in `kube-prometheus-stack-values.yaml` or r
 After investigation, classify:
 
 **CRITICAL** (page immediately):
-- cloudless.online returning 5xx / not reachable
+- cloudless.gr returning 5xx / not reachable
 - Cloudflare tunnel down (zero connectors)
 - Prometheus down for >15 min (blind monitoring)
 - Both cluster nodes NotReady
@@ -229,7 +229,7 @@ These alerts are intentionally disabled — do not investigate unless user expli
 - `KubeControllerManagerDown` — k3s embeds controller manager
 - `KubeProxyDown` — k3s uses kube-router
 - `NodeRAIDDegraded` / `NodeRAIDDiskFailure` — NVMe/SD hardware, no RAID
-- `NodeFileDescriptorLimit` — constant false positive on Pi 4 1GB under normal load
+- `NodeFileDescriptorLimit` — constant false positive on Pi 3B 1GB under normal load
 - `KubeAPIErrorBudgetBurn` — production SLO, too noisy for homelab
 - `Watchdog` — intentional no-op heartbeat
 - `InfoInhibitor` — meta alert for info inhibition pattern

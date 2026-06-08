@@ -3,7 +3,13 @@ name: Restart Pi Self-Hosted Runners
 # Restarts or re-registers the GitHub Actions runner service on omv-2 and omv-3.
 # SSH targets are hardcoded: omv-2 = 192.168.1.131, omv-3 = 192.168.1.132.
 #
+# IMPORTANT: Requires Tailscale subnet routing to be active on omv-main
+# (192.168.1.0/24 route approved in admin.tailscale.com) before these LAN
+# IPs are reachable from GitHub Actions runners.
+#
 # Required secrets:
+#   TS_OAUTH_CLIENT_ID      — Tailscale OAuth client (for subnet access)
+#   TS_OAUTH_SECRET         — Tailscale OAuth secret
 #   PI_SSH_KEY              — private SSH key with access to both hosts
 #   RUNNER_REGISTRATION_PAT — GitHub PAT with repo scope (only for re_register=true)
 #
@@ -31,6 +37,14 @@ jobs:
         host: ["omv-2", "omv-3"]
 
     steps:
+      - name: Connect to Tailscale (for LAN subnet access)
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          ephemeral: true
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh

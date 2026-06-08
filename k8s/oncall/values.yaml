@@ -1,4 +1,4 @@
-base_url: oncall.cloudless.online
+base_url: oncall.cloudless.gr
 base_url_protocol: https
 
 # ── Grafana ──────────────────────────────────────────────────────────────────
@@ -25,7 +25,10 @@ redis:
 externalRedis:
   host: oncall-redis.oncall.svc.cluster.local
   port: 6379
-  password: "OnCallRedis2026!"
+  # Password sourced from k8s secret (key: redis-password) — never inline.
+  # Create with: k8s/oncall/scripts/create-oncall-secrets.sh
+  existingSecret: oncall-redis-external
+  passwordKey: redis-password
 
 # ── Database: MariaDB (standalone deployment, official image) ─────────────────
 # NOTE: MariaDB is deployed separately as mariadb:11 (Bitnami arm64 issues)
@@ -41,7 +44,11 @@ externalMysql:
   port: 3306
   db_name: oncall
   user: oncall
-  password: "OncallDB2026!"
+  # Password sourced from k8s secret — never inline.
+  # Create with: k8s/oncall/scripts/create-oncall-secrets.sh
+  # passwordKey is REQUIRED — the chart has no default key name for existingSecret.
+  existingSecret: oncall-mysql-external
+  passwordKey: mariadb-root-password
 
 # ── Engine ────────────────────────────────────────────────────────────────────
 engine:

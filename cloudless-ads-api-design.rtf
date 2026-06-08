@@ -28,7 +28,7 @@ Google Ads API Integration \emdash Design Documentation\par}
 {\f1\fs20\bullet  Authentication: Amazon Cognito (admin-only JWT gate on all API routes)\par}
 \par
 {\f1\fs20\b Data Flow:\par}
-{\f1\fs20 1. Authenticated admin user opens the dashboard at manage.cloudless.online\par}
+{\f1\fs20 1. Authenticated admin user opens the dashboard at manage.cloudless.gr\par}
 {\f1\fs20 2. Dashboard calls internal API route: GET /api/admin/campaigns/google\par}
 {\f1\fs20 3. API route retrieves OAuth credentials and Developer Token from AWS SSM Parameter Store\par}
 {\f1\fs20 4. API route calls the Google Ads API (GoogleAdsService.SearchStream) to fetch campaign metrics\par}

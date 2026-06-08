@@ -54,7 +54,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::278585680617:role/GitHubActionsOIDC
-          aws-region: eu-west-1
+          aws-region: us-east-1
           role-session-name: key-rotation-${{ github.run_id }}
 
       - name: Audit CloudTrail for old key usage

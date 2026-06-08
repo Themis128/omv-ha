@@ -3,16 +3,10 @@ kind: Namespace
 metadata:
   name: oncall
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: oncall-mariadb-secret
-  namespace: oncall
-type: Opaque
-stringData:
-  MYSQL_ROOT_PASSWORD: "OncallRoot2026!"
-  MYSQL_PASSWORD: "OncallDB2026!"
----
+# NOTE: The oncall-mariadb-secret / oncall-mysql-external / oncall-redis-external
+# secrets are NOT defined here — they are generated (never committed as plaintext).
+# Run this BEFORE `kubectl apply -f k8s/oncall/oncall-deps.yaml`:
+#   bash k8s/oncall/scripts/create-oncall-secrets.sh
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -102,6 +96,15 @@ spec:
       containers:
       - name: redis
         image: redis:7-alpine
+        # requirepass sourced from the same secret OnCall connects with
+        # (oncall-redis-external/redis-password) — guarantees both sides match.
+        command: ["redis-server", "--requirepass", "$(REDIS_PASSWORD)"]
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: oncall-redis-external
+              key: redis-password
         ports:
         - containerPort: 6379
         resources:

@@ -84,7 +84,7 @@ jobs:
       - name: Verify Pi node reachability (optional smoke test)
         run: |
           # Ping omv-main by Tailscale hostname; skip gracefully if not reachable
-          if tailscale ping --c 1 omv 2>/dev/null; then
+          if tailscale ping -c 1 100.113.41.119 2>/dev/null; then
             echo "omv reachable via Tailscale"
           else
             echo "::warning::omv not reachable via Tailscale (check ACLs or node status)"

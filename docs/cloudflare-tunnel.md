@@ -1,4 +1,4 @@
-# Cloudflare Tunnel — cloudless.online
+# Cloudflare Tunnel — cloudless.gr
 
 Bypasses CGNAT (ISP WAN 100.80.158.201 is in 100.64.0.0/10) by creating an outbound
 tunnel from the Pi cluster to Cloudflare's edge. No port forwarding needed.
@@ -11,9 +11,9 @@ Internet
         ├── cloudflared on omv-main (192.168.1.128) — systemd service [primary]
         └── cloudflared-ha pod on omv-ha (192.168.1.130) — k8s Deployment  [failover]
               └── Traefik LoadBalancer VIP (192.168.1.200:18443)
-                    ├── cloudless.online      → cloudless-app (Next.js)
-                    ├── www.cloudless.online  → cloudless-app (Next.js)
-                    └── auth.cloudless.online → keycloak
+                    ├── cloudless.gr      → cloudless-app (Next.js)
+                    ├── www.cloudless.gr  → cloudless-app (Next.js)
+                    └── auth.cloudless.gr → keycloak
 ```
 
 Both connectors run the same tunnel. Cloudflare automatically routes traffic through
@@ -23,8 +23,7 @@ within seconds, with no DNS changes required.
 ## HA connector setup (omv-ha)
 
 The `k8s/cloudless/cloudflared-ha.yaml` manifest runs a second connector as a k8s
-Deployment on omv-ha. It tolerates the `control-plane:NoSchedule` taint so it can
-schedule on the HA node.
+Deployment on omv-ha (agent-only since 2026-05-24, no taints).
 
 **Deploy once:**
 ```bash
@@ -52,22 +51,22 @@ kubectl logs -n cloudless -l app=cloudflared-ha --tail=20
 |-----|-------|
 | Tunnel name | `cloudless-tunnel` |
 | Tunnel ID | `a82f24a8-f767-4a59-bc77-1d59ad132be2` |
-| Cloudflare zone | `cloudless.online` (zone `aa875388a91714c369b1e20107e643f5`) |
+| Cloudflare zone | `cloudless.gr` (zone `aa875388a91714c369b1e20107e643f5`) |
 | Protocol | http2 (TCP fallback — more stable behind CGNAT than QUIC) |
 | Installed on | omv-main (192.168.1.128) |
 | Config file | `/etc/cloudflared/config.yml` |
 | Credentials | `/etc/cloudflared/a82f24a8-f767-4a59-bc77-1d59ad132be2.json` |
 | systemd service | `cloudflared.service` (enabled, starts on boot) |
 
-## DNS records (cloudless.online)
+## DNS records (cloudless.gr)
 
 | Type | Name | Target |
 |------|------|--------|
-| CNAME | `cloudless.online` | `a82f24a8-f767-4a59-bc77-1d59ad132be2.cfargotunnel.com` |
-| CNAME | `*.cloudless.online` | `a82f24a8-f767-4a59-bc77-1d59ad132be2.cfargotunnel.com` |
+| CNAME | `cloudless.gr` | `a82f24a8-f767-4a59-bc77-1d59ad132be2.cfargotunnel.com` |
+| CNAME | `*.cloudless.gr` | `a82f24a8-f767-4a59-bc77-1d59ad132be2.cfargotunnel.com` |
 
 All other A/AAAA records for the apex and subdomains were removed. The `auth` A record
-(150.228.63.192, old deployment) was deleted — auth.cloudless.online now routes through
+(150.228.63.192, old deployment) was deleted — auth.cloudless.gr now routes through
 the tunnel to Keycloak in k3s.
 
 ## Config file (`/etc/cloudflared/config.yml`)
@@ -78,11 +77,11 @@ credentials-file: /etc/cloudflared/a82f24a8-f767-4a59-bc77-1d59ad132be2.json
 protocol: http2
 
 ingress:
-  - hostname: cloudless.online
+  - hostname: cloudless.gr
     service: https://192.168.1.200:18443
     originRequest:
       noTLSVerify: true
-  - hostname: "*.cloudless.online"
+  - hostname: "*.cloudless.gr"
     service: https://192.168.1.200:18443
     originRequest:
       noTLSVerify: true
@@ -97,7 +96,7 @@ Route53 challenge).
 
 > **⚠️ SECURITY:** A token was previously hardcoded here and has been exposed in git history.
 > Rotate it immediately: Cloudflare dashboard → My Profile → API Tokens → Revoke.
-> Create a replacement with scope `Zone:DNS:Edit` on `cloudless.online` and store it
+> Create a replacement with scope `Zone:DNS:Edit` on `cloudless.gr` and store it
 > in the MCP server's environment, not in this file.
 
 ```
@@ -105,7 +104,7 @@ CLOUDFLARE_API_TOKEN=<set via env — never commit>
 CLOUDFLARE_ZONE_ID=aa875388a91714c369b1e20107e643f5
 ```
 
-Token scope: Zone:DNS:Edit on cloudless.online.
+Token scope: Zone:DNS:Edit on cloudless.gr.
 
 ## Operations
 
@@ -130,7 +129,7 @@ sudo journalctl -u cloudflared --since "5 minutes ago" | grep -E "Registered|ERR
 2. Add a k8s Ingress resource in the relevant namespace pointing to Traefik
 3. Restart cloudflared: `sudo systemctl restart cloudflared`
 
-The `*.cloudless.online` wildcard CNAME already covers new subdomains — no DNS changes needed.
+The `*.cloudless.gr` wildcard CNAME already covers new subdomains — no DNS changes needed.
 
 ### Rotate tunnel credentials
 ```bash
@@ -161,8 +160,8 @@ cloudflared tunnel create cloudless-tunnel
 
 # Write config to /etc/cloudflared/config.yml
 # Add DNS routes
-cloudflared tunnel route dns --overwrite-dns cloudless-tunnel cloudless.online
-cloudflared tunnel route dns --overwrite-dns cloudless-tunnel "*.cloudless.online"
+cloudflared tunnel route dns --overwrite-dns cloudless-tunnel cloudless.gr
+cloudflared tunnel route dns --overwrite-dns cloudless-tunnel "*.cloudless.gr"
 
 # Install and start systemd service
 sudo cloudflared service install

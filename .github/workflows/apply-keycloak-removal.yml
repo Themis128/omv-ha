@@ -42,14 +42,6 @@ on:
         description: "Print actions without executing"
         type: boolean
         default: false
-  push:
-    branches:
-      - claude/node-architecture-research-fuYGh
-    paths:
-      - ".github/workflows/apply-keycloak-removal.yml"
-      - "k8s/cloudless/oauth2-proxy.yaml"
-      - "k8s/ha/scripts/grant-iam-cognito-setup.sh"
-      - "k8s/ha/scripts/grant-iam-oidc-trust.sh"
 
 jobs:
   # ─── Job 1: AWS-only — no Tailscale needed ────────────────────────────────
@@ -148,8 +140,8 @@ jobs:
             --allowed-o-auth-flows code \
             --allowed-o-auth-scopes openid email profile \
             --allowed-o-auth-flows-user-pool-client \
-            --callback-urls "https://manage.cloudless.online/oauth2/callback" \
-            --logout-urls "https://manage.cloudless.online" \
+            --callback-urls "https://manage.cloudless.gr/oauth2/callback" \
+            --logout-urls "https://manage.cloudless.gr" \
             --supported-identity-providers COGNITO \
             --prevent-user-existence-errors ENABLED \
             --enable-token-revocation \
@@ -308,7 +300,7 @@ jobs:
           chmod 600 ~/.ssh/pi_key
           cat >> ~/.ssh/config <<'EOF'
           Host omv
-            HostName omv
+            HostName 100.113.41.119
             User tbaltzakis
             IdentityFile ~/.ssh/pi_key
             StrictHostKeyChecking no
@@ -389,11 +381,11 @@ jobs:
           ```bash
           kubectl get pods -n cloudless -l app=oauth2-proxy    # Running
           kubectl get namespace keycloak                        # NotFound
-          curl -I https://manage.cloudless.online               # 302 → Cognito
+          curl -I https://manage.cloudless.gr               # 302 → Cognito
           ```
 
           ### Remaining manual steps
-          1. Browser-verify login at <https://manage.cloudless.online>
-          2. Remove `auth.cloudless.online` CNAME from Cloudflare dashboard
+          1. Browser-verify login at <https://manage.cloudless.gr>
+          2. Remove `auth.cloudless.gr` CNAME from Cloudflare dashboard
           3. Merge PR #14
           EOF

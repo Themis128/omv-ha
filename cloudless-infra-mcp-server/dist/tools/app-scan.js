@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { runOnNode } from "../services/ssh.js";
 const APPS = {
-    cloudless: "https://cloudless.online",
-    manager: "https://manage.cloudless.online",
+    cloudless: "https://cloudless.gr",
+    manager: "https://manage.cloudless.gr",
 };
 // Security headers we expect on every response
 const SECURITY_HEADERS = [
@@ -40,7 +40,7 @@ export function registerAppScanTools(server) {
     // ── app_security_scan ─────────────────────────────────────────────────────
     server.registerTool("app_security_scan", {
         title: "App — Security Header Scan",
-        description: `Check HTTP security headers for cloudless.online and/or manage.cloudless.online.
+        description: `Check HTTP security headers for cloudless.gr and/or manage.cloudless.gr.
 Validates: HSTS, X-Content-Type-Options, X-Frame-Options, CSP, Referrer-Policy, Permissions-Policy.
 Also checks TLS grade and redirect behaviour (HTTP→HTTPS).
 Run after any Traefik/Cloudflare config change or before a production release.`,
@@ -101,7 +101,7 @@ Run after any Traefik/Cloudflare config change or before a production release.`,
     // ── app_perf_scan ─────────────────────────────────────────────────────────
     server.registerTool("app_perf_scan", {
         title: "App — Performance Header Scan",
-        description: `Check HTTP performance indicators for cloudless.online and/or manage.cloudless.online.
+        description: `Check HTTP performance indicators for cloudless.gr and/or manage.cloudless.gr.
 Checks: gzip/brotli compression, cache-control directives, Cloudflare cache status (HIT/MISS/BYPASS),
 ETag presence, and TTFB (time-to-first-byte via curl timing).
 Run after CDN config changes or to baseline response performance.`,
@@ -180,7 +180,7 @@ Run before a quarterly maintenance pass or when planning upgrades.`,
     server.registerTool("app_improvement_report", {
         title: "App — Full Improvement Report",
         description: `Run all app scans (security headers, performance, CSRF guard, WebSocket auth) for
-cloudless.online and manage.cloudless.online and return a prioritised improvement list.
+cloudless.gr and manage.cloudless.gr and return a prioritised improvement list.
 This is the entry point for a full app audit — use it first, then drill into specifics.`,
         inputSchema: z.object({}),
         annotations: { readOnlyHint: true, destructiveHint: false },
@@ -200,8 +200,8 @@ This is the entry point for a full app audit — use it first, then drill into s
         const [clH, mgH, clTTFB, mgTTFB, clEnc, mgEnc] = checks;
         const report = ["# App Improvement Report\n"];
         for (const [label, headersRaw, ttfb, enc] of [
-            ["cloudless.online", clH, clTTFB, clEnc],
-            ["manage.cloudless.online", mgH, mgTTFB, mgEnc],
+            ["cloudless.gr", clH, clTTFB, clEnc],
+            ["manage.cloudless.gr", mgH, mgTTFB, mgEnc],
         ]) {
             const headers = parseHeaders(headersRaw.stdout || "");
             const missing = SECURITY_HEADERS.filter((h) => !headers[h]);

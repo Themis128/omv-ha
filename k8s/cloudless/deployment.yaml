@@ -19,7 +19,7 @@ spec:
         app: cloudless
     spec:
       nodeSelector:
-        kubernetes.io/hostname: omv  # pin to omv-main: Pi5 8GB, omv-ha is Pi4 1GB
+        kubernetes.io/hostname: omv  # pin to omv-main: Pi5 8GB, omv-ha is Pi3B 1GB agent
       imagePullSecrets:
         - name: regcred-ecr
       containers:
@@ -78,16 +78,16 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: cloudless-online-tls
+  name: cloudless-gr-tls
   namespace: cloudless
 spec:
-  secretName: cloudless-online-tls
+  secretName: cloudless-gr-tls
   issuerRef:
     name: letsencrypt-cloudflare
     kind: ClusterIssuer
   dnsNames:
-    - cloudless.online
-    - www.cloudless.online
+    - cloudless.gr
+    - www.cloudless.gr
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -101,11 +101,11 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - cloudless.online
-        - www.cloudless.online
-      secretName: cloudless-online-tls
+        - cloudless.gr
+        - www.cloudless.gr
+      secretName: cloudless-gr-tls
   rules:
-    - host: cloudless.online
+    - host: cloudless.gr
       http:
         paths:
           - path: /
@@ -115,7 +115,7 @@ spec:
                 name: cloudless
                 port:
                   number: 3000
-    - host: www.cloudless.online
+    - host: www.cloudless.gr
       http:
         paths:
           - path: /
