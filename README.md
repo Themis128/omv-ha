@@ -82,8 +82,9 @@ helm upgrade --install kube-prom prometheus-community/kube-prometheus-stack \
   -n monitoring --create-namespace \
   -f k8s/monitoring/kube-prometheus-stack-values.yaml
 
-# 3. OnCall deps (MariaDB + Redis)
-kubectl apply -f k8s/oncall/oncall-deps.yaml
+# 3. OnCall deps (MariaDB + Redis) — secrets are generated, never committed
+bash k8s/oncall/scripts/create-oncall-secrets.sh
+kubectl apply -f k8s-temp/oncall-deps.yaml   # MariaDB + Redis StatefulSets
 
 # 4. OnCall engine (Helm)
 helm upgrade --install oncall grafana/oncall -n oncall --create-namespace \

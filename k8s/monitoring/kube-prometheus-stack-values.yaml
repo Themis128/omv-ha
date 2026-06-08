@@ -118,7 +118,9 @@ alertmanager:
             http_config:
               basic_auth:
                 username: alertmanager
-                password: "am-ntfy-2026!"
+                # Password mounted from k8s secret (never inline) — see
+                # alertmanagerSpec.secrets below + k8s/monitoring/scripts/create-ntfy-basic-auth.sh
+                password_file: /etc/alertmanager/secrets/ntfy-basic-auth/password
       - name: "oncall-webhook"
         webhook_configs:
           - url: "http://oncall-engine.oncall.svc.cluster.local:8080/integrations/v1/alertmanager/aed2bf7d35817a5e8f27306c35d3/"
@@ -132,6 +134,11 @@ alertmanager:
             max_alerts: 20
   alertmanagerSpec:
     replicas: 1
+    # Mounts secret `ntfy-basic-auth` (key: password) at
+    # /etc/alertmanager/secrets/ntfy-basic-auth/password for the ntfy receiver's
+    # basic_auth password_file. Create with create-ntfy-basic-auth.sh.
+    secrets:
+      - ntfy-basic-auth
     nodeSelector:
       kubernetes.io/hostname: omv
     retention: 24h
