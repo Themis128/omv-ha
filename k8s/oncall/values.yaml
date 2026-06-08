@@ -44,9 +44,11 @@ externalMysql:
   port: 3306
   db_name: oncall
   user: oncall
-  # Password sourced from k8s secret (key: mariadb-root-password) — never inline.
+  # Password sourced from k8s secret — never inline.
   # Create with: k8s/oncall/scripts/create-oncall-secrets.sh
+  # passwordKey is REQUIRED — the chart has no default key name for existingSecret.
   existingSecret: oncall-mysql-external
+  passwordKey: mariadb-root-password
 
 # ── Engine ────────────────────────────────────────────────────────────────────
 engine:
